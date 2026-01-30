@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:kittycash/Auth/Login/forget_password/password_reset.dart';
 import 'package:kittycash/Auth/Login/register_screen.dart';
 import 'package:kittycash/util/Bottom_navigation.dart';
-import 'package:kittycash/Main/Dashboard.dart';
 import 'package:kittycash/util/main_home_screen.dart';
 import 'package:kittycash/util/enum.dart';
 

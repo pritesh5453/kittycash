@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:kittycash/Main/Dashboard.dart';
+import 'package:kittycash/Main/Dashboard/Dashboard.dart';
+import 'package:kittycash/Main/Portfolio/portfolio.dart';
 import 'package:kittycash/util/enum.dart';
 
 class MainHomeScreen extends ConsumerStatefulWidget {
@@ -30,7 +31,7 @@ class _MainHomeScreenState extends ConsumerState<MainHomeScreen> {
       BottomTab.home: HomeDashboardScreen(),
       BottomTab.referrals: HomeDashboardScreen(),
       BottomTab.transactions: HomeDashboardScreen(),
-      BottomTab.portfolio: HomeDashboardScreen(),
+      BottomTab.portfolio: PortfolioScreen(),
       BottomTab.support: HomeDashboardScreen(),
     };
 
@@ -89,7 +90,7 @@ class _MainHomeScreenState extends ConsumerState<MainHomeScreen> {
                     ),
                     _navItem(
                       Icons.pie_chart_outline,
-                      "Profile",
+                      "Portfolio",
                       selectedTab == BottomTab.portfolio,
                     ),
                     _navItem(
