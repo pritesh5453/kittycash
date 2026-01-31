@@ -18,6 +18,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     (_) => TextEditingController(),
   );
   final List<FocusNode> _otpFocusNodes = List.generate(6, (_) => FocusNode());
+  //this is otp controllers and focus nodes
 
   @override
   void dispose() {
