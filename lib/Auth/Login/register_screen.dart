@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:kittycash/Auth/Login/login_screen.dart';
+import 'package:kittycash/Auth/Login/Otp_Page.dart';
+import 'package:kittycash/services/auth_service.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -11,23 +12,70 @@ class RegisterScreen extends StatefulWidget {
 class _RegisterScreenState extends State<RegisterScreen> {
   bool obscurePassword = true;
   bool obscureConfirmPassword = true;
+  bool isLoading = false;
 
-  // 🔥 OTP controllers & focus nodes
-  final List<TextEditingController> _otpControllers = List.generate(
-    6,
-    (_) => TextEditingController(),
-  );
-  final List<FocusNode> _otpFocusNodes = List.generate(6, (_) => FocusNode());
+  final nameController = TextEditingController();
+  final mobileController = TextEditingController();
+  final emailController = TextEditingController();
+  final passwordController = TextEditingController();
+  final confirmPasswordController = TextEditingController();
+  final dobController = TextEditingController();
+  final referralController = TextEditingController();
 
   @override
   void dispose() {
-    for (final c in _otpControllers) {
-      c.dispose();
-    }
-    for (final f in _otpFocusNodes) {
-      f.dispose();
-    }
+    nameController.dispose();
+    mobileController.dispose();
+    emailController.dispose();
+    passwordController.dispose();
+    confirmPasswordController.dispose();
+    dobController.dispose();
+    referralController.dispose();
     super.dispose();
+  }
+
+  Future<void> registerUser() async {
+    if (passwordController.text != confirmPasswordController.text) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Passwords do not match")));
+      return;
+    }
+
+    setState(() => isLoading = true);
+
+    final response = await AuthService().register(
+      name: nameController.text.trim(),
+      mobile: mobileController.text.trim(),
+      email: emailController.text.trim(),
+      password: passwordController.text.trim(),
+      confirmPassword: confirmPasswordController.text.trim(), // ✅ important
+      dob: dobController.text.trim(),
+      referral: referralController.text.trim(),
+    );
+
+    setState(() => isLoading = false);
+
+    if (response["status"] == true) {
+      if (response["status"] == true) {
+        final sessionId = response["data"]["session_id"];
+
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => OtpRegisterPage(
+              email: emailController.text.trim(),
+              mobile: mobileController.text.trim(),
+              sessionId: sessionId, // 🔥 MUST
+            ),
+          ),
+        );
+      }
+    } else {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(response["message"])));
+    }
   }
 
   @override
@@ -38,270 +86,127 @@ class _RegisterScreenState extends State<RegisterScreen> {
       backgroundColor: Colors.white,
       body: SafeArea(
         child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 12),
 
-                /// 🔝 BACK + HELLO
-                Row(
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.arrow_back_ios_new, size: 18),
-                      onPressed: () => Navigator.pop(context),
-                    ),
-                    const SizedBox(width: 4),
-                    const Text(
-                      "Hello",
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF2F6BFF),
-                      ),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 4),
-
-                /// 📝 TITLE
-                const Padding(
-                  padding: EdgeInsets.only(left: 8),
-                  child: Text(
-                    "Register Here",
+              Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.arrow_back_ios_new, size: 18),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                  const SizedBox(width: 4),
+                  const Text(
+                    "Hello",
                     style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFF0A1B44),
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF2F6BFF),
                     ),
                   ),
-                ),
+                ],
+              ),
 
-                const SizedBox(height: 28),
+              const SizedBox(height: 4),
 
-                /// 👤 NAME
-                _inputField(hint: "Name", icon: Icons.person_outline),
-
-                const SizedBox(height: 14),
-
-                /// 📱 MOBILE
-                _inputField(
-                  hint: "Mobile No",
-                  icon: Icons.phone_outlined,
-                  keyboardType: TextInputType.phone,
-                ),
-
-                const SizedBox(height: 18),
-
-                /// 🔢 OTP LABEL
-                const Text(
-                  "OTP",
+              const Padding(
+                padding: EdgeInsets.only(left: 8),
+                child: Text(
+                  "Register Here",
                   style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
                     color: Color(0xFF0A1B44),
                   ),
                 ),
+              ),
 
-                const SizedBox(height: 10),
+              const SizedBox(height: 28),
 
-                /// 🔢 OTP BOXES (AUTO MOVE)
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: List.generate(6, (index) => _otpBox(index)),
+              _field("Name", nameController),
+              const SizedBox(height: 14),
+
+              _field("Mobile No", mobileController),
+              const SizedBox(height: 20),
+              _field("Email", emailController),
+              const SizedBox(height: 14),
+
+              _passwordField(
+                "Create Password",
+                passwordController,
+                obscurePassword,
+                () => setState(() => obscurePassword = !obscurePassword),
+              ),
+              const SizedBox(height: 14),
+
+              _passwordField(
+                "Re-Enter Password",
+                confirmPasswordController,
+                obscureConfirmPassword,
+                () => setState(
+                  () => obscureConfirmPassword = !obscureConfirmPassword,
                 ),
+              ),
+              const SizedBox(height: 14),
 
-                const SizedBox(height: 20),
+              _field("DD-MM-YYYY", dobController),
+              const SizedBox(height: 14),
 
-                /// 📧 EMAIL
-                _inputField(
-                  hint: "Email",
-                  icon: Icons.mail_outline,
-                  keyboardType: TextInputType.emailAddress,
-                ),
+              _field("Referral Code (Optional)", referralController),
 
-                const SizedBox(height: 14),
+              const SizedBox(height: 28),
 
-                /// 🔒 CREATE PASSWORD
-                _passwordField(
-                  hint: "Create Password",
-                  obscure: obscurePassword,
-                  toggle: () {
-                    setState(() {
-                      obscurePassword = !obscurePassword;
-                    });
-                  },
-                ),
-
-                const SizedBox(height: 14),
-
-                /// 🔒 CONFIRM PASSWORD
-                _passwordField(
-                  hint: "Re-Enter Password",
-                  obscure: obscureConfirmPassword,
-                  toggle: () {
-                    setState(() {
-                      obscureConfirmPassword = !obscureConfirmPassword;
-                    });
-                  },
-                ),
-
-                const SizedBox(height: 14),
-
-                /// 📅 DOB
-                _inputField(
-                  hint: "DD-MM-YYYY",
-                  icon: Icons.calendar_month_outlined,
-                ),
-
-                const SizedBox(height: 14),
-
-                /// 🎁 REFERRAL
-                _inputField(
-                  hint: "Referral Code (Optional)",
-                  icon: Icons.card_giftcard_outlined,
-                ),
-
-                const SizedBox(height: 28),
-
-                /// 🔵 REGISTER BUTTON
-                SizedBox(
-                  width: width,
-                  height: 52,
-                  child: ElevatedButton(
-                    onPressed: () {
-                      // TODO: Register API
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF2F6BFF),
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: const Text(
-                      "Register",
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                      ),
-                    ),
+              SizedBox(
+                width: width,
+                height: 52,
+                child: ElevatedButton(
+                  onPressed: isLoading ? null : registerUser,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2F6BFF),
                   ),
+                  child: isLoading
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : const Text("Register"),
                 ),
+              ),
 
-                const SizedBox(height: 18),
-
-                /// 🔁 LOGIN LINK
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Text(
-                      "Already have an account ? ",
-                      style: TextStyle(fontSize: 13, color: Colors.black54),
-                    ),
-                    GestureDetector(
-                      onTap: () {
-                        Navigator.pushReplacement(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const LoginScreen(),
-                          ),
-                        );
-                      },
-                      child: const Text(
-                        "Login",
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF2F6BFF),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 30),
-              ],
-            ),
+              const SizedBox(height: 30),
+            ],
           ),
         ),
       ),
     );
   }
 
-  /// 🔹 COMMON INPUT FIELD
-  Widget _inputField({
-    required String hint,
-    required IconData icon,
-    TextInputType keyboardType = TextInputType.text,
-  }) {
+  Widget _field(String hint, TextEditingController controller) {
     return TextField(
-      keyboardType: keyboardType,
+      controller: controller,
       decoration: InputDecoration(
         hintText: hint,
-        prefixIcon: Icon(icon),
-        filled: true,
-        fillColor: Colors.white,
-        contentPadding: const EdgeInsets.symmetric(vertical: 16),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );
   }
 
-  /// 🔒 PASSWORD FIELD
-  Widget _passwordField({
-    required String hint,
-    required bool obscure,
-    required VoidCallback toggle,
-  }) {
+  Widget _passwordField(
+    String hint,
+    TextEditingController controller,
+    bool obscure,
+    VoidCallback toggle,
+  ) {
     return TextField(
+      controller: controller,
       obscureText: obscure,
       decoration: InputDecoration(
         hintText: hint,
-        prefixIcon: const Icon(Icons.lock_outline),
         suffixIcon: IconButton(
           icon: Icon(obscure ? Icons.visibility_off : Icons.visibility),
           onPressed: toggle,
         ),
-        filled: true,
-        fillColor: Colors.white,
-        contentPadding: const EdgeInsets.symmetric(vertical: 16),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-    );
-  }
-
-  /// 🔢 OTP BOX WITH AUTO FOCUS
-  Widget _otpBox(int index) {
-    return SizedBox(
-      width: 46,
-      height: 50,
-      child: TextField(
-        controller: _otpControllers[index],
-        focusNode: _otpFocusNodes[index],
-        textAlign: TextAlign.center,
-        maxLength: 1,
-        keyboardType: TextInputType.number,
-        decoration: InputDecoration(
-          counterText: "",
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-        ),
-        onChanged: (value) {
-          if (value.isNotEmpty) {
-            if (index < 5) {
-              FocusScope.of(context).requestFocus(_otpFocusNodes[index + 1]);
-            } else {
-              FocusScope.of(context).unfocus();
-            }
-          } else {
-            if (index > 0) {
-              FocusScope.of(context).requestFocus(_otpFocusNodes[index - 1]);
-            }
-          }
-        },
       ),
     );
   }

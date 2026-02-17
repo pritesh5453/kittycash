@@ -4,4 +4,4 @@ final bottomTabProvider = StateProvider<BottomTab>((ref) {
   return BottomTab.home;
 });
 
-enum BottomTab { referrals, transactions, home, portfolio, support }
+enum BottomTab { referrals, orders, home, portfolio, profile }

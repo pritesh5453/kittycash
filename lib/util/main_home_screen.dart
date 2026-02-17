@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kittycash/Main/Dashboard/Dashboard.dart';
-import 'package:kittycash/Main/Portfolio/portfolio.dart';
+import 'package:kittycash/Profile_Screen/profile_Screen.dart';
+import 'package:kittycash/Refferal_screen/ReferralScreen.dart';
+import 'package:kittycash/order_Screen/orders_screen.dart';
+import 'package:kittycash/portfolio/portfolio_Screen.dart';
 import 'package:kittycash/util/enum.dart';
 
 class MainHomeScreen extends ConsumerStatefulWidget {
@@ -28,11 +31,11 @@ class _MainHomeScreenState extends ConsumerState<MainHomeScreen> {
     final selectedTab = ref.watch(bottomTabProvider);
 
     final Map<BottomTab, Widget> pages = {
-      BottomTab.home: HomeDashboardScreen(),
-      BottomTab.referrals: HomeDashboardScreen(),
-      BottomTab.transactions: HomeDashboardScreen(),
+      BottomTab.home: CryptoHomeScreen(),
+      BottomTab.referrals: ReferralScreen(),
+      BottomTab.orders: OrdersScreen(),
       BottomTab.portfolio: PortfolioScreen(),
-      BottomTab.support: HomeDashboardScreen(),
+      BottomTab.profile: ProfileScreen(),
     };
 
     return Scaffold(
@@ -81,7 +84,7 @@ class _MainHomeScreenState extends ConsumerState<MainHomeScreen> {
                     _navItem(
                       Icons.history,
                       "Transactions",
-                      selectedTab == BottomTab.transactions,
+                      selectedTab == BottomTab.orders,
                     ),
                     _navItem(
                       Icons.home_outlined,
@@ -95,8 +98,8 @@ class _MainHomeScreenState extends ConsumerState<MainHomeScreen> {
                     ),
                     _navItem(
                       Icons.headset_mic_outlined,
-                      "Support",
-                      selectedTab == BottomTab.support,
+                      "Profile",
+                      selectedTab == BottomTab.profile,
                     ),
                   ],
                 ),

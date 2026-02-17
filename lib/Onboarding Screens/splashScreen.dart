@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:kittycash/Onboarding%20Screens/Welcome1.dart';
 import 'package:kittycash/Onboarding%20Screens/welcome_screen.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -52,7 +53,7 @@ class _SplashScreenState extends State<SplashScreen>
         if (!mounted) return;
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (_) => const WelcomeScreen()),
+          MaterialPageRoute(builder: (_) => const OnboardingScreen()),
         );
       });
     });

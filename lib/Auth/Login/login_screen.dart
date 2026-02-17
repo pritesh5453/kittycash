@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:kittycash/Auth/Login/forget_password/password_reset.dart';
 import 'package:kittycash/Auth/Login/register_screen.dart';
-import 'package:kittycash/util/Bottom_navigation.dart';
 import 'package:kittycash/util/main_home_screen.dart';
 import 'package:kittycash/util/enum.dart';
+import 'package:kittycash/services/auth_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -15,6 +15,55 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   bool obscurePassword = true;
   bool touchIdEnabled = false;
+  bool isLoading = false;
+
+  final emailController = TextEditingController();
+  final passwordController = TextEditingController();
+
+  Future<void> loginUser() async {
+    if (emailController.text.isEmpty || passwordController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please enter email & password")),
+      );
+      return;
+    }
+
+    setState(() {
+      isLoading = true;
+    });
+
+    try {
+      final response = await AuthService().login(
+        email: emailController.text.trim(),
+        password: passwordController.text.trim(),
+      );
+
+      if (response["status"] == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(response["message"] ?? "Login Successful")),
+        );
+
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => MainHomeScreen(initialTab: BottomTab.home),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(response["message"] ?? "Login Failed")),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Server Error")));
+    }
+
+    setState(() {
+      isLoading = false;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -27,61 +76,23 @@ class _LoginScreenState extends State<LoginScreen> {
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                const SizedBox(height: 12),
-
-                /// 🔝 BACK + LOGO
-                Row(
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.arrow_back_ios_new, size: 18),
-                      onPressed: () => Navigator.pop(context),
-                    ),
-                    const Spacer(),
-                    Image.asset(
-                      'assets/images/Coinmoney.png',
-                      width: 22,
-                      height: 22,
-                      color: const Color(0xFF2F6BFF),
-                    ),
-                    const SizedBox(width: 6),
-                    const Text(
-                      "KittyCash",
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF2F6BFF),
-                      ),
-                    ),
-                    const Spacer(flex: 2),
-                  ],
-                ),
-
                 const SizedBox(height: 32),
 
-                /// 📝 HEADING
                 const Text(
                   "Login to your\nAccount",
                   textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 26,
-                    fontWeight: FontWeight.w700,
-                    height: 1.3,
-                    color: Color(0xFF0A1B44),
-                  ),
+                  style: TextStyle(fontSize: 26, fontWeight: FontWeight.w700),
                 ),
 
                 const SizedBox(height: 36),
 
-                /// 📧 EMAIL FIELD
+                /// EMAIL
                 TextField(
+                  controller: emailController,
                   decoration: InputDecoration(
                     hintText: "Email address",
                     prefixIcon: const Icon(Icons.mail_outline),
-                    filled: true,
-                    fillColor: Colors.white,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 16),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
@@ -90,8 +101,9 @@ class _LoginScreenState extends State<LoginScreen> {
 
                 const SizedBox(height: 16),
 
-                /// 🔒 PASSWORD FIELD
+                /// PASSWORD
                 TextField(
+                  controller: passwordController,
                   obscureText: obscurePassword,
                   decoration: InputDecoration(
                     hintText: "Password",
@@ -108,112 +120,46 @@ class _LoginScreenState extends State<LoginScreen> {
                         });
                       },
                     ),
-                    filled: true,
-                    fillColor: Colors.white,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 16),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
                   ),
                 ),
 
-                const SizedBox(height: 12),
-
-                /// 🔁 FORGOT PASSWORD
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Text(
-                      "Forgot your password? ",
-                      style: TextStyle(fontSize: 13, color: Colors.black54),
-                    ),
-                    GestureDetector(
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const PasswordResetScreen(),
-                          ),
-                        );
-                      },
-                      child: const Text(
-                        "Click here",
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF2F6BFF),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 18),
-
-                /// 🆔 TOUCH ID SWITCH
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      "Unlock with Touch ID?",
-                      style: TextStyle(fontSize: 14, color: Color(0xFF0A1B44)),
-                    ),
-                    Switch(
-                      value: touchIdEnabled,
-                      activeColor: const Color(0xFF2F6BFF),
-                      onChanged: (value) {
-                        setState(() {
-                          touchIdEnabled = value;
-                        });
-                      },
-                    ),
-                  ],
-                ),
-
                 const SizedBox(height: 28),
 
-                /// 🔵 LOGIN BUTTON
+                /// LOGIN BUTTON
                 SizedBox(
                   width: width,
                   height: 52,
                   child: ElevatedButton(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) =>
-                              MainHomeScreen(initialTab: BottomTab.home),
-                        ),
-                      );
-                    },
+                    onPressed: isLoading ? null : loginUser,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF2F6BFF),
-                      elevation: 0,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    child: const Text(
-                      "Log In",
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                      ),
-                    ),
+                    child: isLoading
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : const Text(
+                            "Log In",
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
+                          ),
                   ),
                 ),
 
                 const SizedBox(height: 20),
 
-                /// 🔁 SIGN UP LINK
+                /// REGISTER
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Text(
-                      "Already have an account ? ",
-                      style: TextStyle(fontSize: 13, color: Colors.black54),
-                    ),
+                    const Text("Don’t have an account? "),
                     GestureDetector(
                       onTap: () {
                         Navigator.pushReplacement(
@@ -226,16 +172,13 @@ class _LoginScreenState extends State<LoginScreen> {
                       child: const Text(
                         "Sign Up",
                         style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
+                          fontWeight: FontWeight.bold,
                           color: Color(0xFF2F6BFF),
                         ),
                       ),
                     ),
                   ],
                 ),
-
-                const SizedBox(height: 30),
               ],
             ),
           ),

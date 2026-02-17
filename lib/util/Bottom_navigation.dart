@@ -40,7 +40,7 @@ class CustomBottomNav extends ConsumerWidget {
                       ref,
                       icon: Icons.history,
                       label: "Transactions",
-                      tab: BottomTab.transactions,
+                      tab: BottomTab.orders,
                       selectedTab: selectedTab,
                     ),
                     _item(
@@ -60,8 +60,8 @@ class CustomBottomNav extends ConsumerWidget {
                     _item(
                       ref,
                       icon: Icons.headset_mic_outlined,
-                      label: "Support",
-                      tab: BottomTab.support,
+                      label: "Profile",
+                      tab: BottomTab.profile,
                       selectedTab: selectedTab,
                     ),
                   ],
