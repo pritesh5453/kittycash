@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
-import 'package:kittycash/Onboarding%20Screens/Welcome1.dart';
-import 'package:kittycash/Onboarding%20Screens/welcome_screen.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:kittycash/Onboarding Screens/welcome_screen.dart';
+import 'package:kittycash/util/main_home_screen.dart';
+import 'package:kittycash/util/enum.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -17,46 +19,71 @@ class _SplashScreenState extends State<SplashScreen>
   late AnimationController _logoController;
   late AnimationController _iconRotateController;
 
+  final FlutterSecureStorage storage = const FlutterSecureStorage();
+
   bool showWhiteScreen = false;
 
   @override
   void initState() {
     super.initState();
 
-    // 🔵 Background animation
     _lineController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 4),
     )..repeat();
 
-    // ⚪ White screen logo animation
     _logoController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 900),
     );
 
-    // 🔄 Rotating PNG logo
     _iconRotateController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 3),
     )..repeat();
 
-    // 🔁 Switch to white screen
+    startSplashFlow();
+  }
+
+  /// ================= SPLASH FLOW =================
+
+  void startSplashFlow() {
     Timer(const Duration(seconds: 3), () {
       if (!mounted) return;
 
       setState(() => showWhiteScreen = true);
       _logoController.forward();
 
-      // 🚀 Navigate to HomeScreen after 2 seconds
-      Timer(const Duration(seconds: 2), () {
+      Timer(const Duration(seconds: 2), () async {
         if (!mounted) return;
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const OnboardingScreen()),
-        );
+
+        await checkLoginAndNavigate();
       });
     });
+  }
+
+  /// ================= AUTO LOGIN CHECK =================
+
+  Future<void> checkLoginAndNavigate() async {
+    final token = await storage.read(key: "auth_token");
+
+    if (!mounted) return;
+
+    if (token != null && token.isNotEmpty) {
+      /// ✅ Token exists → Go to Home
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => MainHomeScreen(initialTab: BottomTab.home),
+        ),
+      );
+    } else {
+      /// ❌ No token → Go to Welcome/Login
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const WelcomeScreen()),
+      );
+    }
   }
 
   @override
@@ -83,7 +110,6 @@ class _SplashScreenState extends State<SplashScreen>
       key: const ValueKey("blue"),
       children: [
         Container(color: const Color(0xFF2F6BFF)),
-
         AnimatedBuilder(
           animation: _lineController,
           builder: (_, __) {
@@ -93,7 +119,6 @@ class _SplashScreenState extends State<SplashScreen>
             );
           },
         ),
-
         Center(
           child: RotationTransition(
             turns: _iconRotateController,
@@ -101,7 +126,6 @@ class _SplashScreenState extends State<SplashScreen>
               'assets/images/Coinmoney.png',
               width: 40,
               height: 40,
-              fit: BoxFit.contain,
             ),
           ),
         ),
@@ -126,7 +150,6 @@ class _SplashScreenState extends State<SplashScreen>
                   'assets/images/Coinmoney.png',
                   width: 28,
                   height: 28,
-                  fit: BoxFit.contain,
                   color: const Color(0xFF2F6BFF),
                 ),
                 const SizedBox(width: 8),
@@ -147,7 +170,7 @@ class _SplashScreenState extends State<SplashScreen>
   }
 }
 
-/// 🎨 BACKGROUND CONTOUR LINES (UNCHANGED)
+/// 🎨 BACKGROUND CONTOUR LINES
 class ContourLinesPainter extends CustomPainter {
   final double progress;
 

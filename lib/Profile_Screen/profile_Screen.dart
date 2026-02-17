@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:dio/dio.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:kittycash/Auth/Login/login_screen.dart';
 import 'package:kittycash/Main/Dashboard/Dashboard.dart';
 import 'package:kittycash/Profile_Screen/KycGettingStartedScreen.dart';
 import 'package:kittycash/Refferal_screen/ReferralScreen.dart';
@@ -15,20 +18,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Map<String, dynamic>? profile;
   bool loading = true;
 
+  final Dio dio = Dio();
+  final FlutterSecureStorage storage = const FlutterSecureStorage();
+
   @override
   void initState() {
     super.initState();
-    print("🔥 PROFILE SCREEN INIT");
     loadProfile();
   }
 
-  Future<void> loadProfile() async {
-    print("🔥 loadProfile CALLED");
+  /// ================= LOAD PROFILE =================
 
-    const token = "16|luMBOYamB5XjCtIOYf48sHW9Tx3KFfPsCaNeRVs08d2689d4";
+  Future<void> loadProfile() async {
+    final token = await storage.read(key: "auth_token");
+
+    if (token == null) {
+      setState(() => loading = false);
+      return;
+    }
 
     final res = await DashboardService().getDashboardProfile(token);
-    print("🔥 RESPONSE => $res");
 
     if (res["status"] == true) {
       profile = res["data"];
@@ -37,6 +46,67 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() {
       loading = false;
     });
+  }
+
+  /// ================= LOGOUT FUNCTION =================
+
+  Future<void> logoutUser() async {
+    try {
+      final token = await storage.read(key: "auth_token");
+
+      if (token == null) return;
+
+      final response = await dio.post(
+        "https://kittycash.co.in/api/logout",
+        options: Options(
+          headers: {
+            "Authorization": "Bearer $token",
+            "Accept": "application/json",
+          },
+        ),
+      );
+
+      print("LOGOUT RESPONSE: ${response.data}");
+
+      if (response.statusCode == 200 && response.data["status"] == true) {
+        /// Delete token
+        await storage.delete(key: "auth_token");
+
+        if (!mounted) return;
+
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const LoginScreen()),
+          (route) => false,
+        );
+      }
+    } catch (e) {
+      print("Logout Error: $e");
+    }
+  }
+
+  /// ================= LOGOUT CONFIRMATION =================
+
+  void showLogoutDialog() {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text("Confirm Logout"),
+        content: const Text("Are you sure you want to logout?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Cancel"),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              await logoutUser();
+            },
+            child: const Text("Logout"),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -56,7 +126,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-                // 🔹 HEADER (same UI)
+                /// 🔹 HEADER
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(
@@ -124,7 +194,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ),
 
-                // 🔹 MENU (same)
+                /// 🔹 MENU
                 Expanded(
                   child: ListView(
                     children: [
@@ -163,9 +233,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         "Terms and Conditions",
                         () {},
                       ),
-                      _menuItem(context, Icons.logout, "Logout", () {
-                        Navigator.pop(context);
-                      }),
+                      _menuItem(
+                        context,
+                        Icons.logout,
+                        "Logout",
+                        showLogoutDialog,
+                      ),
                     ],
                   ),
                 ),
