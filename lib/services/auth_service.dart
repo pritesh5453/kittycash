@@ -17,19 +17,26 @@ class AuthService {
       Uri.parse("$baseUrl/login"),
       headers: {
         "Accept": "application/json",
-        "Authorization":
-            "Bearer rF09gA38E8OrXy85lPN91DAyZuyBzp6JGcinptUd8e947ee5",
+        "Content-Type": "application/json",
       },
-      body: {"email": email, "password": password},
+      body: jsonEncode({"email": email, "password": password}),
     );
 
-    print("Status Code: ${response.statusCode}");
-    print("Response Body: ${response.body}");
+    print("📡 Status Code: ${response.statusCode}");
+    print("📦 Response Body: ${response.body}");
 
     try {
-      return jsonDecode(response.body);
+      final decoded = jsonDecode(response.body);
+
+      // ✅ Success response
+      if (response.statusCode == 200 && decoded["status"] == true) {
+        return decoded;
+      }
+
+      // ❌ Login failed
+      return {"status": false, "message": decoded["message"] ?? "Login failed"};
     } catch (e) {
-      print("JSON Decode Error: $e");
+      print("❌ JSON Decode Error: $e");
       return {"status": false, "message": "Invalid server response"};
     }
   }
@@ -41,10 +48,8 @@ class AuthService {
     required String email,
   }) async {
     try {
-      final url = Uri.parse("$baseUrl/verify-otp");
-
       final response = await http.post(
-        url,
+        Uri.parse("$baseUrl/verify-otp"),
         headers: {
           "Accept": "application/json",
           "Content-Type": "application/json",
@@ -52,13 +57,16 @@ class AuthService {
         body: jsonEncode({"session_id": sessionId, "otp": otp}),
       );
 
+      print("📡 OTP STATUS: ${response.statusCode}");
+      print("📦 OTP BODY: ${response.body}");
+
       final data = jsonDecode(response.body);
 
-      if (response.statusCode == 200) {
+      if (response.statusCode == 200 && data["status"] == true) {
         return {
           "status": true,
           "message": data["message"] ?? "OTP verified",
-          "data": data,
+          "data": data["data"],
         };
       } else {
         return {"status": false, "message": data["message"] ?? "Invalid OTP"};
@@ -69,34 +77,34 @@ class AuthService {
   }
 
   // ================= REGISTER =================
-
   Future<Map<String, dynamic>> register({
     required String name,
     required String email,
     required String mobile,
     required String password,
     required String confirmPassword,
-    required String dob, // backend ला optional असेल तर ignore होईल
     required String referral,
+    required String dob,
   }) async {
     try {
-      final url = Uri.parse("$baseUrl/register");
-
       final response = await http.post(
-        url,
+        Uri.parse("$baseUrl/register"),
         headers: {
-          "Content-Type": "application/json",
           "Accept": "application/json",
+          "Content-Type": "application/json",
         },
         body: jsonEncode({
           "name": name,
           "email": email,
-          "phone": mobile, // 🔥 API expects phone
+          "phone": mobile,
           "password": password,
           "password_confirmation": confirmPassword,
           if (referral.isNotEmpty) "referral_code": referral,
         }),
       );
+
+      print("📡 REGISTER STATUS: ${response.statusCode}");
+      print("📦 REGISTER BODY: ${response.body}");
 
       final data = jsonDecode(response.body);
 
@@ -104,7 +112,7 @@ class AuthService {
         return {
           "status": true,
           "message": data["message"] ?? "Registration successful",
-          "data": data,
+          "data": data["data"],
         };
       } else {
         return {
