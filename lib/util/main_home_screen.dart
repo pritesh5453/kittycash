@@ -35,7 +35,7 @@ class _MainHomeScreenState extends ConsumerState<MainHomeScreen> {
       BottomTab.referrals: ReferralScreen(),
       BottomTab.orders: OrdersScreen(),
       BottomTab.portfolio: PortfolioScreen(),
-      BottomTab.profile: ProfileScreen(),
+      BottomTab.profile: ProfileScreen(profile: null),
     };
 
     return Scaffold(
