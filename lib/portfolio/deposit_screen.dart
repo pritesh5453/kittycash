@@ -1,15 +1,60 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:kittycash/portfolio/deposit_money_form_screen.dart';
+import 'package:kittycash/services/auth_service.dart';
 
-class DepositScreen extends StatelessWidget {
+class DepositScreen extends StatefulWidget {
   const DepositScreen({super.key});
+
+  @override
+  State<DepositScreen> createState() => _DepositScreenState();
+}
+
+class _DepositScreenState extends State<DepositScreen> {
+  final AuthService _authService = AuthService();
+  
+  // Static data as fallback
+  final Map<String, String> _staticBankDetails = {
+    'account_holder_name': 'kittycash',
+    'bank_name': 'state bank of india',
+    'account_number': '41136293247',
+    'ifsc_code': 'SBIN0061400',
+  };
+  
+  Map<String, dynamic>? _bankDetails;
+  bool _isLoading = true;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchBankDetails();
+  }
+
+  Future<void> _fetchBankDetails() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    final result = await _authService.getActiveBankDetails();
+    
+    setState(() {
+      _isLoading = false;
+      if (result['status'] == true) {
+        _bankDetails = result['data'];
+      } else {
+        _errorMessage = result['message'];
+        // Use static data as fallback
+        _bankDetails = _staticBankDetails;
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF6F7FB), // ✅ same soft bg
-      /// 🔹 AppBar
+      backgroundColor: const Color(0xFFF6F7FB),
       appBar: AppBar(
         backgroundColor: const Color(0xFF194EEE),
         elevation: 0,
@@ -18,7 +63,6 @@ class DepositScreen extends StatelessWidget {
           style: TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.bold,
-            // fontSize: 18,
           ),
         ),
         actions: const [
@@ -31,30 +75,29 @@ class DepositScreen extends StatelessWidget {
           SizedBox(width: 12),
         ],
       ),
-
-      /// 🔹 Body
       body: Padding(
         padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            _bankDetailsCard(),
-            const SizedBox(height: 16),
-            _instructionsCard(),
-            const Spacer(),
-
-            /// 🔥 Right aligned Deposit button
-            Align(
-              alignment: Alignment.centerRight,
-              child: _depositButton(context),
-            ),
-          ],
-        ),
+        child: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : Column(
+                children: [
+                  _bankDetailsCard(),
+                  const SizedBox(height: 16),
+                  _instructionsCard(),
+                  const Spacer(),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: _depositButton(context),
+                  ),
+                ],
+              ),
       ),
     );
   }
 
-  /// ================= BANK DETAILS =================
   Widget _bankDetailsCard() {
+    if (_bankDetails == null) return const SizedBox.shrink();
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -65,8 +108,8 @@ class DepositScreen extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: const [
+          const Row(
+            children: [
               Icon(Icons.account_balance, color: Color(0xFFFF9F2D)),
               SizedBox(width: 8),
               Text(
@@ -76,16 +119,43 @@ class DepositScreen extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          _detailRow("Account Holder", "kittycash"),
-          _detailRow("Bank Name", "State Bank of India"),
-          _copyRow("Account Number", "41136293295"),
-          _copyRow("IFSC Code", "SBIN0061395"),
+          _detailRow(
+            "Account Holder",
+            _bankDetails!['account_holder_name']?.toString().toUpperCase() ?? 
+                _staticBankDetails['account_holder_name']!.toUpperCase(),
+          ),
+          _detailRow(
+            "Bank Name",
+            _bankDetails!['bank_name']?.toString().toUpperCase() ?? 
+                _staticBankDetails['bank_name']!.toUpperCase(),
+          ),
+          _copyRow(
+            "Account Number",
+            _bankDetails!['account_number']?.toString() ?? 
+                _staticBankDetails['account_number']!,
+          ),
+          _copyRow(
+            "IFSC Code",
+            _bankDetails!['ifsc_code']?.toString().toUpperCase() ?? 
+                _staticBankDetails['ifsc_code']!,
+          ),
+          if (_errorMessage != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                "Note: Using default data. $_errorMessage",
+                style: const TextStyle(
+                  color: Colors.orange,
+                  fontSize: 12,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ),
         ],
       ),
     );
   }
 
-  /// ================= INSTRUCTIONS =================
   Widget _instructionsCard() {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -128,7 +198,6 @@ class DepositScreen extends StatelessWidget {
     );
   }
 
-  /// ================= DEPOSIT BUTTON =================
   Widget _depositButton(BuildContext context) {
     return InkWell(
       borderRadius: BorderRadius.circular(12),
@@ -136,8 +205,7 @@ class DepositScreen extends StatelessWidget {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) =>
-                const DepositMoneyFormScreen(), // 👈 navigate here
+            builder: (context) => const DepositMoneyFormScreen(),
           ),
         );
       },
@@ -166,7 +234,6 @@ class DepositScreen extends StatelessWidget {
     );
   }
 
-  /// ================= HELPERS =================
   Widget _detailRow(String title, String value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
@@ -194,6 +261,12 @@ class DepositScreen extends StatelessWidget {
               InkWell(
                 onTap: () {
                   Clipboard.setData(ClipboardData(text: value));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text("Copied to clipboard"),
+                      duration: Duration(seconds: 1),
+                    ),
+                  );
                 },
                 child: Container(
                   padding: const EdgeInsets.symmetric(
@@ -218,144 +291,6 @@ class DepositScreen extends StatelessWidget {
   }
 }
 
-Widget depositHistoryCard() {
-  return Container(
-    padding: const EdgeInsets.all(16),
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(18),
-      border: Border.all(color: const Color(0xFFFF9F2D), width: 2),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Header
-        Row(
-          children: const [
-            Icon(Icons.history, color: Color(0xFF1E7BFF)),
-            SizedBox(width: 8),
-            Text(
-              "Deposit History",
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-
-        // Table Header
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-          decoration: BoxDecoration(
-            color: const Color(0xFFF6F7FB),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Row(
-            children: const [
-              _TH("Date", flex: 2),
-              _TH("Amount"),
-              _TH("UTR No.", flex: 2),
-              _TH("Verification"),
-              _TH("Status"),
-              _TH("Actions"),
-            ],
-          ),
-        ),
-        const SizedBox(height: 8),
-
-        // Rows
-        _historyRow(
-          date: "Jan 28, 2026\n13:59",
-          amount: "₹ 100.00",
-          utr: "UTR00001",
-          verification: "Approved",
-          status: "Completed",
-        ),
-        const SizedBox(height: 6),
-        _historyRow(
-          date: "Jan 28, 2026\n13:59",
-          amount: "₹ 100.00",
-          utr: "UTR00001",
-          verification: "Approved",
-          status: "Completed",
-        ),
-      ],
-    ),
-  );
-}
-
-// ===== Table Header Cell
-class _TH extends StatelessWidget {
-  final String text;
-  final int flex;
-  const _TH(this.text, {this.flex = 1});
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      flex: flex,
-      child: Text(
-        text,
-        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
-      ),
-    );
-  }
-}
-
-// ===== One History Row
-Widget _historyRow({
-  required String date,
-  required String amount,
-  required String utr,
-  required String verification,
-  required String status,
-}) {
-  return Row(
-    children: [
-      Expanded(
-        flex: 2,
-        child: Text(date, style: const TextStyle(fontSize: 11)),
-      ),
-      Expanded(
-        child: Text(
-          amount,
-          style: const TextStyle(fontSize: 11, color: Colors.blue),
-        ),
-      ),
-      Expanded(flex: 2, child: Text(utr, style: const TextStyle(fontSize: 11))),
-      Expanded(
-        child: Text(
-          verification,
-          style: const TextStyle(fontSize: 11, color: Colors.green),
-        ),
-      ),
-      Expanded(
-        child: Text(
-          status,
-          style: const TextStyle(fontSize: 11, color: Colors.green),
-        ),
-      ),
-      Expanded(
-        child: Align(
-          alignment: Alignment.centerLeft,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.orange.shade50,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFFF9F2D)),
-            ),
-            child: const Text(
-              "View",
-              style: TextStyle(fontSize: 11, color: Color(0xFFFF9F2D)),
-            ),
-          ),
-        ),
-      ),
-    ],
-  );
-}
-
-/// ================= INSTRUCTION ITEM =================
 class _InstructionItem extends StatelessWidget {
   final String text;
   const _InstructionItem(this.text);

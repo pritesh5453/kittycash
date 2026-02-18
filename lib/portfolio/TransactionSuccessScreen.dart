@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:kittycash/portfolio/deposit_money_form_screen.dart';
 
 class TransactionSuccessScreen extends StatelessWidget {
-  const TransactionSuccessScreen({super.key});
+  const TransactionSuccessScreen({super.key, required String amount, required String utrNumber, required String transactionId});
 
   @override
   Widget build(BuildContext context) {

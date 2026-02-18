@@ -5,7 +5,6 @@ import 'package:kittycash/Auth/Login/login_screen.dart';
 import 'package:kittycash/Main/Dashboard/Dashboard.dart';
 import 'package:kittycash/Profile_Screen/KycGettingStartedScreen.dart';
 import 'package:kittycash/Refferal_screen/ReferralScreen.dart';
-//import 'package:kittycash/services/dashboard_service.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key, required profile});
