@@ -1,9 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:kittycash/portfolio/deposit_money_form_screen.dart';
 
-class TransactionSuccessScreen extends StatelessWidget {
-  const TransactionSuccessScreen({super.key});
+class TransactionSuccessScreen extends StatefulWidget {
+  final String amount;
+  final String utrNumber;
+  final String transactionId;
+  final String? walletBalance; // Optional - can be fetched or passed
 
+  const TransactionSuccessScreen({
+    super.key,
+    required this.amount,
+    required this.utrNumber,
+    required this.transactionId,
+    this.walletBalance,
+  });
+
+  @override
+  State<TransactionSuccessScreen> createState() =>
+      _TransactionSuccessScreenState();
+}
+
+class _TransactionSuccessScreenState extends State<TransactionSuccessScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -69,10 +86,10 @@ class TransactionSuccessScreen extends StatelessWidget {
 
               const SizedBox(height: 10),
 
-              // Subtitle
-              const Text(
-                "₹2000 Added to your wallet",
-                style: TextStyle(color: Colors.white70, fontSize: 14),
+              // Dynamic Amount
+              Text(
+                "₹${widget.amount} Added to your wallet",
+                style: const TextStyle(color: Colors.white70, fontSize: 14),
               ),
 
               const SizedBox(height: 25),
@@ -93,9 +110,12 @@ class TransactionSuccessScreen extends StatelessWidget {
 
               const SizedBox(height: 8),
 
-              const Text(
-                "₹ 4200",
-                style: TextStyle(
+              // Dynamic Wallet Balance
+              Text(
+                widget.walletBalance != null
+                    ? "₹ ${widget.walletBalance}"
+                    : "₹ ${widget.amount}", // Show deposited amount as fallback
+                style: const TextStyle(
                   color: Colors.white,
                   fontSize: 26,
                   fontWeight: FontWeight.bold,
@@ -103,6 +123,29 @@ class TransactionSuccessScreen extends StatelessWidget {
               ),
 
               const Spacer(),
+
+              // Transaction Details Card
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    children: [
+                      _detailRow("Amount", "₹${widget.amount}"),
+                      const SizedBox(height: 8),
+                      _detailRow("UTR Number", widget.utrNumber),
+                      const SizedBox(height: 8),
+                      _detailRow("Transaction ID", widget.transactionId),
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 24),
 
               // Button
               Padding(
@@ -142,6 +185,26 @@ class TransactionSuccessScreen extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _detailRow(String label, String value) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(color: Colors.white70, fontSize: 14),
+        ),
+        Text(
+          value,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
     );
   }
 }

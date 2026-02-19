@@ -2,6 +2,9 @@ import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiService {
+
+
+
   static final Dio dio = Dio(
     BaseOptions(
       baseUrl: "https://kittycash.co.in/api",
@@ -24,4 +27,8 @@ class ApiService {
       print("TOKEN ATTACHED: $token");
     }
   }
+
+
+
+  
 }
