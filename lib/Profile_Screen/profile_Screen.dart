@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:kittycash/Auth/Login/login_screen.dart';
-import 'package:kittycash/Main/Dashboard/Dashboard.dart';
-import 'package:kittycash/Profile_Screen/KycGettingStartedScreen.dart';
+import 'package:kittycash/Profile_Screen/edit_profile_screen.dart';
+import 'package:kittycash/Profile_Screen/kyc_screen.dart';
 import 'package:kittycash/Refferal_screen/ReferralScreen.dart';
 
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key, required profile});
+  const ProfileScreen({super.key, Object? profile});
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -29,22 +29,40 @@ class _ProfileScreenState extends State<ProfileScreen> {
   /// ================= LOAD PROFILE =================
 
   Future<void> loadProfile() async {
-    final token = await storage.read(key: "auth_token");
+    try {
+      final token = await storage.read(key: "auth_token");
 
-    if (token == null) {
+      print("TOKEN: $token");
+
+      if (token == null) {
+        setState(() => loading = false);
+        return;
+      }
+
+      final response = await dio.get(
+        "https://kittycash.co.in/api/dashboard/profile",
+        options: Options(
+          headers: {
+            "Authorization": "Bearer $token",
+            "Accept": "application/json",
+          },
+        ),
+      );
+
+      print("FULL RESPONSE: ${response.data}");
+
+      if (response.statusCode == 200 && response.data["success"] == true) {
+        setState(() {
+          profile = response.data["data"]; // 🔥 FIXED HERE
+          loading = false;
+        });
+      } else {
+        setState(() => loading = false);
+      }
+    } catch (e) {
+      print("Profile Error: $e");
       setState(() => loading = false);
-      return;
     }
-
-    final res = await DashboardService().getDashboardProfile(token);
-
-    if (res["status"] == true) {
-      profile = res["data"];
-    }
-
-    setState(() {
-      loading = false;
-    });
   }
 
   /// ================= LOGOUT FUNCTION =================
@@ -68,7 +86,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       print("LOGOUT RESPONSE: ${response.data}");
 
       if (response.statusCode == 200 && response.data["status"] == true) {
-        /// Delete token
         await storage.delete(key: "auth_token");
 
         if (!mounted) return;
@@ -171,17 +188,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                        const SizedBox(height: 4),
+
                         Text(
-                          "Customer Code : ${profile?["customer_code"] ?? ""}",
+                          "Customer Code : ${profile?["id"] ?? ""}",
                           style: const TextStyle(
                             color: Colors.white70,
                             fontSize: 13,
                           ),
                         ),
+
                         const SizedBox(height: 12),
                         OutlinedButton(
-                          onPressed: () {},
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    EditProfileScreen(name: profile?["name"]),
+                              ),
+                            );
+                          },
                           style: OutlinedButton.styleFrom(
                             side: const BorderSide(color: Colors.white),
                             foregroundColor: Colors.white,
@@ -203,9 +229,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         "KYC Verification",
                         () => Navigator.push(
                           context,
-                          MaterialPageRoute(
-                            builder: (_) => const KycGettingStartedScreen(),
-                          ),
+                          MaterialPageRoute(builder: (_) => const KycScreen()),
                         ),
                       ),
                       _menuItem(

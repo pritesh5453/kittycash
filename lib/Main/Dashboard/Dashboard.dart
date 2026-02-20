@@ -1,33 +1,9 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:kittycash/Profile_Screen/profile_Screen.dart';
+import 'package:kittycash/Main/Buy/buy.dart';
+import 'package:kittycash/Main/Dashboard/dashboard_model.dart';
+import 'package:kittycash/Main/Dashboard/dashboard_services.dart';
 
-//////////////////////////////////////////////////////////////
-/// SERVICE
-//////////////////////////////////////////////////////////////
-class DashboardService {
-  static const String baseUrl = "https://kittycash.co.in/api";
-
-  Future<Map<String, dynamic>> getDashboardProfile(String token) async {
-    final response = await http.get(
-      Uri.parse("$baseUrl/dashboard/profile"),
-      headers: {"Accept": "application/json", "Authorization": "Bearer $token"},
-    );
-
-    final data = jsonDecode(response.body);
-
-    if (response.statusCode == 200) {
-      return {"status": true, "data": data};
-    }
-    return {"status": false};
-  }
-}
-
-//////////////////////////////////////////////////////////////
-/// DASHBOARD SCREEN
-//////////////////////////////////////////////////////////////
 class CryptoHomeScreen extends StatefulWidget {
   const CryptoHomeScreen({super.key});
 
@@ -36,7 +12,8 @@ class CryptoHomeScreen extends StatefulWidget {
 }
 
 class _CryptoHomeScreenState extends State<CryptoHomeScreen> {
-  Map<String, dynamic>? profile;
+  UserModel? user;
+  List<CoinModel> coins = [];
   bool loading = true;
 
   @override
@@ -46,22 +23,26 @@ class _CryptoHomeScreenState extends State<CryptoHomeScreen> {
   }
 
   Future<void> loadDashboard() async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString("auth_token");
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString("auth_token");
 
-    if (token == null) {
+      if (token == null) {
+        setState(() => loading = false);
+        return;
+      }
+
+      final dashboard = await DashboardService().getOverview(token);
+
+      setState(() {
+        user = dashboard.user;
+        coins = dashboard.coins;
+        loading = false;
+      });
+    } catch (e) {
+      print("Dashboard Error: $e");
       setState(() => loading = false);
-      return;
     }
-
-    final res = await DashboardService().getDashboardProfile(token);
-
-    if (res["status"] == true) {
-      final responseData = res["data"];
-      profile = responseData["data"] ?? responseData;
-    }
-
-    setState(() => loading = false);
   }
 
   @override
@@ -71,26 +52,31 @@ class _CryptoHomeScreenState extends State<CryptoHomeScreen> {
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF2F3F7),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
-            children: [
-              HomeHeader(profile: profile),
-              const Padding(
-                padding: EdgeInsets.all(20),
-                child: Column(
-                  children: [
-                    ReferCard(),
-                    SizedBox(height: 20),
-                    TrendingSection(),
-                    SizedBox(height: 20),
-                    AllCoinsSection(),
-                  ],
-                ),
+      backgroundColor: const Color(0xFFF4F6FA),
+      body: SingleChildScrollView(
+        child: Column(
+          children: [
+            HomeHeader(user: user),
+
+            const Padding(
+              padding: EdgeInsets.all(20),
+              child: Column(
+                children: [
+                  ReferCard(),
+                  SizedBox(height: 20),
+                  TrendingSection(),
+                  SizedBox(height: 20),
+                ],
               ),
-            ],
-          ),
+            ),
+
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: AllCoinsSection(coins: coins),
+            ),
+
+            const SizedBox(height: 30),
+          ],
         ),
       ),
     );
@@ -98,19 +84,19 @@ class _CryptoHomeScreenState extends State<CryptoHomeScreen> {
 }
 
 //////////////////////////////////////////////////////////////
-/// HEADER
+// HEADER
 //////////////////////////////////////////////////////////////
+
 class HomeHeader extends StatelessWidget {
-  final Map<String, dynamic>? profile;
-  const HomeHeader({super.key, this.profile});
+  final UserModel? user;
+  const HomeHeader({super.key, this.user});
 
   @override
   Widget build(BuildContext context) {
-    final name =
-        profile?['name'] ?? profile?['full_name'] ?? profile?['username'] ?? "";
+    final name = user?.name ?? "";
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 24, 20, 30),
+      padding: const EdgeInsets.fromLTRB(20, 50, 20, 30),
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           colors: [Color(0xFF1E88E5), Color(0xFF1565C0)],
@@ -128,22 +114,9 @@ class HomeHeader extends StatelessWidget {
               fontWeight: FontWeight.bold,
             ),
           ),
-          GestureDetector(
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => ProfileScreen(profile: profile),
-                ),
-              );
-            },
-            child: CircleAvatar(
-              radius: 18,
-              backgroundImage: profile?['profile_image'] != null
-                  ? NetworkImage(profile!['profile_image'])
-                  : const AssetImage("assets/images/profile.png")
-                        as ImageProvider,
-            ),
+          const CircleAvatar(
+            radius: 18,
+            backgroundImage: AssetImage("assets/images/profile.png"),
           ),
         ],
       ),
@@ -152,8 +125,9 @@ class HomeHeader extends StatelessWidget {
 }
 
 //////////////////////////////////////////////////////////////
-/// REFER CARD
+// REFER CARD
 //////////////////////////////////////////////////////////////
+
 class ReferCard extends StatelessWidget {
   const ReferCard({super.key});
 
@@ -172,8 +146,9 @@ class ReferCard extends StatelessWidget {
 }
 
 //////////////////////////////////////////////////////////////
-/// TRENDING
+// TRENDING SECTION
 //////////////////////////////////////////////////////////////
+
 class TrendingSection extends StatelessWidget {
   const TrendingSection({super.key});
 
@@ -185,8 +160,8 @@ class TrendingSection extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
       ),
-      child: Column(
-        children: const [
+      child: const Column(
+        children: [
           Text(
             "Top Trending Coins",
             style: TextStyle(fontWeight: FontWeight.bold),
@@ -210,6 +185,7 @@ class TrendingSection extends StatelessWidget {
 class TrendingCard extends StatelessWidget {
   final String title;
   final String change;
+
   const TrendingCard(this.title, this.change, {super.key});
 
   @override
@@ -238,49 +214,76 @@ class TrendingCard extends StatelessWidget {
 }
 
 //////////////////////////////////////////////////////////////
-/// ALL COINS
+// COINS SECTION
 //////////////////////////////////////////////////////////////
+
 class AllCoinsSection extends StatelessWidget {
-  const AllCoinsSection({super.key});
+  final List<CoinModel> coins;
+  const AllCoinsSection({super.key, required this.coins});
 
   @override
   Widget build(BuildContext context) {
+    if (coins.isEmpty) {
+      return const Text("No coins available");
+    }
+
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
       ),
-      child: const Column(
-        children: [CoinTile(), SizedBox(height: 12), CoinTile()],
+      child: Column(
+        children: coins.map((coin) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: CoinTile(coin: coin),
+          );
+        }).toList(),
       ),
     );
   }
 }
 
 class CoinTile extends StatelessWidget {
-  const CoinTile({super.key});
+  final CoinModel coin;
+  const CoinTile({super.key, required this.coin});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.grey.shade300),
-      ),
-      child: Row(
-        children: const [
-          CircleAvatar(backgroundImage: AssetImage("assets/images/kitty.png")),
-          SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              "KTCH  ₹10.95",
-              style: TextStyle(fontWeight: FontWeight.bold),
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => BuyCoinScreen(
+              coinId: coin.id,
+              coinName: coin.name,
+              serviceCharge: coin.serviceCharge,
+              gstCharges: coin.gstCharges,
+              coinPrice: coin.price,
             ),
           ),
-          Text("+5.9%", style: TextStyle(color: Colors.green)),
-        ],
+        );
+      },
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: Colors.grey.shade300),
+        ),
+        child: Row(
+          children: [
+            CircleAvatar(backgroundImage: NetworkImage(coin.image)),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                "${coin.symbol}  ₹${coin.price.toStringAsFixed(2)}",
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

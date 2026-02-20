@@ -16,8 +16,6 @@ class _OrdersScreenState extends State<OrdersScreen> {
 
   List transactions = [];
   bool isLoading = true;
-  int selectedTab = 0;
-
   String? token;
 
   final String baseUrl =
@@ -29,20 +27,15 @@ class _OrdersScreenState extends State<OrdersScreen> {
     loadTokenAndFetch();
   }
 
-  /// ================= LOAD TOKEN =================
-
   Future<void> loadTokenAndFetch() async {
     token = await storage.read(key: "auth_token");
 
     if (token != null && token!.isNotEmpty) {
       await fetchTransactions();
     } else {
-      debugPrint("Token not found");
       setState(() => isLoading = false);
     }
   }
-
-  /// ================= FETCH TRANSACTIONS =================
 
   Future<void> fetchTransactions() async {
     if (token == null) return;
@@ -71,7 +64,6 @@ class _OrdersScreenState extends State<OrdersScreen> {
     } on DioException catch (e) {
       setState(() => isLoading = false);
 
-      /// 🔴 AUTO LOGOUT ON 401
       if (e.response?.statusCode == 401) {
         await storage.delete(key: "auth_token");
 
@@ -82,31 +74,9 @@ class _OrdersScreenState extends State<OrdersScreen> {
           (route) => false,
         );
       }
-
-      debugPrint("Dio Error: ${e.message}");
     } catch (e) {
       setState(() => isLoading = false);
-      debugPrint("Unknown Error: $e");
     }
-  }
-
-  /// ================= FILTER =================
-
-  List get filteredTransactions {
-    if (selectedTab == 1) {
-      return transactions
-          .where(
-            (e) => (e["status"] ?? "").toString().toLowerCase() == "pending",
-          )
-          .toList();
-    } else if (selectedTab == 2) {
-      return transactions
-          .where(
-            (e) => (e["status"] ?? "").toString().toLowerCase() != "pending",
-          )
-          .toList();
-    }
-    return transactions;
   }
 
   @override
@@ -117,38 +87,42 @@ class _OrdersScreenState extends State<OrdersScreen> {
         children: [
           /// 🔵 HEADER
           Container(
-            padding: const EdgeInsets.only(top: 40, bottom: 12),
+            padding: const EdgeInsets.only(
+              top: 50,
+              left: 16,
+              right: 16,
+              bottom: 20,
+            ),
             decoration: const BoxDecoration(
               color: Color(0xFF2F6BFF),
               borderRadius: BorderRadius.vertical(bottom: Radius.circular(20)),
             ),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SizedBox(height: 20),
                 const Text(
-                  "Orders",
+                  "Transaction History",
                   style: TextStyle(
                     color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
                 const SizedBox(height: 16),
 
-                /// TABS
+                /// SEARCH
                 Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 16),
-                  padding: const EdgeInsets.all(4),
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(30),
                   ),
-                  child: Row(
-                    children: [
-                      _tabButton("All", 0),
-                      _tabButton("Open", 1),
-                      _tabButton("Closed", 2),
-                    ],
+                  child: const TextField(
+                    decoration: InputDecoration(
+                      icon: Icon(Icons.search),
+                      hintText: "Search transactions...",
+                      border: InputBorder.none,
+                    ),
                   ),
                 ),
               ],
@@ -159,7 +133,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
           Expanded(
             child: isLoading
                 ? const Center(child: CircularProgressIndicator())
-                : filteredTransactions.isEmpty
+                : transactions.isEmpty
                 ? const Center(
                     child: Text(
                       "No Transactions Found",
@@ -168,152 +142,151 @@ class _OrdersScreenState extends State<OrdersScreen> {
                   )
                 : RefreshIndicator(
                     onRefresh: fetchTransactions,
-                    child: ListView.builder(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: filteredTransactions.length,
-                      itemBuilder: (context, index) {
-                        final item = filteredTransactions[index];
+                    child: Column(
+                      children: [
+                        /// 🔹 TABLE HEADER
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 14,
+                          ),
+                          color: Colors.grey.shade200,
+                          child: Row(
+                            children: const [
+                              Expanded(
+                                flex: 2,
+                                child: Text(
+                                  "DATE",
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                flex: 1,
+                                child: Text(
+                                  "TYPE",
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                flex: 1,
+                                child: Text(
+                                  "AMOUNT",
+                                  textAlign: TextAlign.right,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
 
-                        return OrderCard(
-                          status: item["status"] ?? "Pending",
-                          isBuy:
-                              (item["type"] ?? "").toString().toLowerCase() ==
-                              "buy",
-                          symbol: item["coin"]?["symbol"] ?? "KTCH",
-                          qty: item["quantity"]?.toString() ?? "0",
-                          price: item["price"]?.toString() ?? "0",
-                          total: item["total"]?.toString() ?? "0",
-                        );
-                      },
+                        /// 🔹 LIST
+                        Expanded(
+                          child: ListView.separated(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            itemCount: transactions.length,
+                            separatorBuilder: (_, __) =>
+                                const Divider(height: 1),
+                            itemBuilder: (context, index) {
+                              final item = transactions[index];
+
+                              final type = (item["type"] ?? "")
+                                  .toString()
+                                  .toUpperCase();
+
+                              final isSell = type == "SELL";
+
+                              final amount =
+                                  (item["actual_amount"] ??
+                                          item["amount_inr"] ??
+                                          0)
+                                      .toString();
+
+                              return Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 16,
+                                ),
+                                child: Row(
+                                  children: [
+                                    /// DATE
+                                    Expanded(
+                                      flex: 2,
+                                      child: Text(
+                                        item["created_at"]
+                                                ?.toString()
+                                                .substring(0, 16) ??
+                                            "",
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          color: Colors.grey,
+                                        ),
+                                      ),
+                                    ),
+
+                                    /// TYPE BADGE
+                                    Expanded(
+                                      flex: 1,
+                                      child: Align(
+                                        alignment: Alignment.centerLeft,
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 10,
+                                            vertical: 5,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: isSell
+                                                ? Colors.green.shade100
+                                                : Colors.blue.shade100,
+                                            borderRadius: BorderRadius.circular(
+                                              16,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            type,
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.bold,
+                                              color: isSell
+                                                  ? Colors.green
+                                                  : Colors.blue,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+
+                                    /// AMOUNT
+                                    Expanded(
+                                      flex: 1,
+                                      child: Text(
+                                        isSell ? "+₹$amount" : "-₹$amount",
+                                        textAlign: TextAlign.right,
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.bold,
+                                          color: isSell
+                                              ? Colors.green
+                                              : Colors.red,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _tabButton(String text, int index) {
-    final isSelected = selectedTab == index;
-
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => setState(() => selectedTab = index),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          decoration: BoxDecoration(
-            color: isSelected ? const Color(0xFF2F6BFF) : Colors.transparent,
-            borderRadius: BorderRadius.circular(25),
-          ),
-          child: Center(
-            child: Text(
-              text,
-              style: TextStyle(
-                color: isSelected ? Colors.white : Colors.grey,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// ================= ORDER CARD =================
-
-class OrderCard extends StatelessWidget {
-  final String status;
-  final bool isBuy;
-  final String symbol;
-  final String qty;
-  final String price;
-  final String total;
-
-  const OrderCard({
-    super.key,
-    required this.status,
-    required this.isBuy,
-    required this.symbol,
-    required this.qty,
-    required this.price,
-    required this.total,
-  });
-
-  Color get statusColor {
-    if (status.toLowerCase() == "pending") {
-      return Colors.blue;
-    } else if (status.toLowerCase() == "completed") {
-      return Colors.green;
-    }
-    return Colors.red;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 14),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 28,
-            backgroundColor: Colors.orange.shade50,
-            child: Text(symbol),
-          ),
-          const SizedBox(width: 12),
-
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  symbol,
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 6),
-                Text("Qty: $qty", style: const TextStyle(color: Colors.grey)),
-                Text(
-                  "Price: ₹$price",
-                  style: const TextStyle(color: Colors.grey),
-                ),
-              ],
-            ),
-          ),
-
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                "Total: ₹$total",
-                style: const TextStyle(fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                isBuy ? "BUY" : "SELL",
-                style: TextStyle(
-                  color: isBuy ? Colors.green : Colors.red,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 6),
-              SizedBox(
-                width: 110,
-                child: Text(
-                  status,
-                  textAlign: TextAlign.right,
-                  style: TextStyle(
-                    color: statusColor,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-            ],
           ),
         ],
       ),

@@ -1,13 +1,70 @@
 import 'package:flutter/material.dart';
-import 'package:kittycash/Refferal_screen/how_it_works_screen.dart';
+import 'package:dio/dio.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:kittycash/Refferal_screen/how_it_works_screen.dart';
 
-class ReferralScreen extends StatelessWidget {
+class ReferralScreen extends StatefulWidget {
   const ReferralScreen({super.key});
 
-  final String referralCode = "E48fsdsds53";
+  @override
+  State<ReferralScreen> createState() => _ReferralScreenState();
+}
 
-  void _snack(BuildContext context, String msg) {
+class _ReferralScreenState extends State<ReferralScreen> {
+  final Dio dio = Dio();
+  final FlutterSecureStorage storage = const FlutterSecureStorage();
+
+  bool loading = true;
+
+  Map<String, dynamic>? user;
+  Map<String, dynamic>? commissions;
+  Map<String, dynamic>? referrals;
+
+  @override
+  void initState() {
+    super.initState();
+    loadReferralData();
+  }
+
+  Future<void> loadReferralData() async {
+    try {
+      final token = await storage.read(key: "auth_token");
+
+      if (token == null) {
+        setState(() => loading = false);
+        return;
+      }
+
+      final response = await dio.get(
+        "https://kittycash.co.in/api/trading/referral-history",
+        options: Options(
+          headers: {
+            "Authorization": "Bearer $token",
+            "Accept": "application/json",
+          },
+        ),
+      );
+
+      print("REFERRAL RESPONSE: ${response.data}");
+
+      if (response.statusCode == 200 && response.data["success"] == true) {
+        setState(() {
+          user = response.data["data"]["user"];
+          commissions = response.data["data"]["commissions"];
+          referrals = response.data["data"]["referrals"];
+          loading = false;
+        });
+      } else {
+        setState(() => loading = false);
+      }
+    } catch (e) {
+      print("Referral Error: $e");
+      setState(() => loading = false);
+    }
+  }
+
+  void _snack(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
@@ -17,48 +74,34 @@ class ReferralScreen extends StatelessWidget {
       backgroundColor: const Color(0xFFF6F7FB),
       appBar: AppBar(
         backgroundColor: const Color(0xFF2F6BFF),
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context),
-        ),
         title: const Text("Referrals"),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.notifications_none),
-            onPressed: () => _snack(context, "Notifications clicked"),
-          ),
-          const Padding(
-            padding: EdgeInsets.only(right: 12),
-            child: CircleAvatar(
-              backgroundImage: NetworkImage("https://i.pravatar.cc/150?img=3"),
+      ),
+      body: loading
+          ? const Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  _referralCodeCard(),
+                  const SizedBox(height: 16),
+                  _totalEarned(),
+                  const SizedBox(height: 16),
+                  _levelCards(),
+                  const SizedBox(height: 16),
+                  // _learnMore(),
+                  // const SizedBox(height: 16),
+                  _referralUsers(),
+                ],
+              ),
             ),
-          ),
-        ],
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            _referralCodeCard(context),
-            const SizedBox(height: 16),
-            _totalEarned(),
-            const SizedBox(height: 16),
-            _levelCards(),
-            const SizedBox(height: 8),
-            _learnMore(context),
-            const SizedBox(height: 20),
-            _userTile(context, "Annette Black", "1st", 200),
-            _userTile(context, "John Doe", "2nd", 100),
-            _userTile(context, "Arvin Kinney", "2nd", 0, reminder: true),
-          ],
-        ),
-      ),
     );
   }
 
-  // 🔹 Referral code + WhatsApp share
-  Widget _referralCodeCard(BuildContext context) {
+  /// 🔹 Referral Code Card
+  Widget _referralCodeCard() {
+    final code = user?["referral_code"] ?? "";
+    final link = user?["referral_link"] ?? "";
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: _box(),
@@ -74,7 +117,7 @@ class ReferralScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  referralCode,
+                  code,
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
@@ -85,17 +128,12 @@ class ReferralScreen extends StatelessWidget {
           ),
           ElevatedButton.icon(
             onPressed: () {
-              Share.share(
-                "Join using my referral code: $referralCode\nDownload the app now!",
-              );
+              Share.share("Join using my referral link:\n$link");
             },
-            icon: const Icon(Icons.share),
-            label: const Text("Share"),
+            icon: const Icon(Icons.share, color: Colors.white),
+            label: const Text("Share", style: TextStyle(color: Colors.white)),
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF2F6BFF),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
             ),
           ),
         ],
@@ -103,8 +141,10 @@ class ReferralScreen extends StatelessWidget {
     );
   }
 
-  // 🔹 Total earned
+  /// 🔹 Total Earned
   Widget _totalEarned() {
+    final total = commissions?["total_earned"] ?? 0;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -113,12 +153,12 @@ class ReferralScreen extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
-        children: const [
-          Text("Total Earned", style: TextStyle(color: Colors.white70)),
-          SizedBox(height: 6),
+        children: [
+          const Text("Total Earned", style: TextStyle(color: Colors.white70)),
+          const SizedBox(height: 6),
           Text(
-            "₹ 3250.75",
-            style: TextStyle(
+            "₹ $total",
+            style: const TextStyle(
               fontSize: 26,
               fontWeight: FontWeight.bold,
               color: Colors.white,
@@ -129,15 +169,28 @@ class ReferralScreen extends StatelessWidget {
     );
   }
 
-  // 🔹 Level cards
+  /// 🔹 Level Cards
   Widget _levelCards() {
+    final level1 = commissions?["level_1"] ?? {};
+    final level2 = commissions?["level_2"] ?? {};
+
     return Row(
       children: [
         Expanded(
-          child: _levelCard("Level 1 (20%)", "₹ 2400.50", "9 Referrals"),
+          child: _levelCard(
+            "Level 1",
+            "₹ ${level1["earned"] ?? 0}",
+            "${level1["count"] ?? 0} Referrals",
+          ),
         ),
         const SizedBox(width: 12),
-        Expanded(child: _levelCard("Level 2 (10%)", "₹ 850.50", "5 Referrals")),
+        Expanded(
+          child: _levelCard(
+            "Level 2",
+            "₹ ${level2["earned"] ?? 0}",
+            "${level2["count"] ?? 0} Referrals",
+          ),
+        ),
       ],
     );
   }
@@ -162,97 +215,60 @@ class ReferralScreen extends StatelessWidget {
     );
   }
 
-  // 🔹 Learn More navigation
-  Widget _learnMore(BuildContext context) {
-    return Align(
-      alignment: Alignment.centerRight,
-      child: GestureDetector(
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const HowItWorksScreen()),
-          );
-        },
-        child: const Text(
-          "Learn More",
-          style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold),
-        ),
-      ),
+  /// 🔹 Referral Users List
+  Widget _referralUsers() {
+    final level1Users = referrals?["level_1"]?["users"] ?? [];
+
+    if (level1Users.isEmpty) {
+      return const Text("No referrals yet");
+    }
+
+    return Column(
+      children: level1Users.map<Widget>((user) {
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(14),
+          decoration: _box(),
+          child: Row(
+            children: [
+              const CircleAvatar(child: Icon(Icons.person)),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  user["name"] ?? "",
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
     );
   }
 
-  // 🔹 User tile
-  Widget _userTile(
-    BuildContext context,
-    String name,
-    String level,
-    int amount, {
-    bool reminder = false,
-  }) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(14),
-      decoration: _box(),
-      child: Row(
-        children: [
-          const CircleAvatar(child: Icon(Icons.person)),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  "$name   $level",
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 6),
-                Wrap(
-                  spacing: 10,
-                  children: const [
-                    _StatusDot("Sign Up"),
-                    _StatusDot("First Investment"),
-                    _StatusDot("KYC"),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          reminder
-              ? OutlinedButton(
-                  onPressed: () => _snack(context, "Reminder sent"),
-                  child: const Text("Send Reminder"),
-                )
-              : Text(
-                  "₹ $amount",
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-        ],
-      ),
-    );
-  }
+  // Widget _learnMore() {
+  //   return Align(
+  //     alignment: Alignment.centerRight,
+  //     child: GestureDetector(
+  //       onTap: () {
+  //         Navigator.push(
+  //           context,
+  //           MaterialPageRoute(builder: (_) => const HowItWorksScreen()),
+  //         );
+  //       },
+  //       child: const Text(
+  //         "Learn More",
+  //         style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold),
+  //       ),
+  //     ),
+  //   );
+  // }
 
   BoxDecoration _box({Color? border}) {
     return BoxDecoration(
       color: Colors.white,
       borderRadius: BorderRadius.circular(16),
       border: border != null ? Border.all(color: border) : null,
-    );
-  }
-}
-
-class _StatusDot extends StatelessWidget {
-  final String text;
-  const _StatusDot(this.text);
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const Icon(Icons.circle, size: 8, color: Colors.green),
-        const SizedBox(width: 4),
-        Text(text, style: const TextStyle(fontSize: 12)),
-      ],
     );
   }
 }
