@@ -14,9 +14,11 @@ class _OrdersScreenState extends State<OrdersScreen> {
   final Dio dio = Dio();
   final FlutterSecureStorage storage = const FlutterSecureStorage();
 
-  List transactions = [];
+  List allTransactions = [];
+  List filteredTransactions = [];
   bool isLoading = true;
   String? token;
+  final TextEditingController searchController = TextEditingController();
 
   final String baseUrl =
       "https://kittycash.co.in/api/dashboard/transactions?page=1";
@@ -25,11 +27,18 @@ class _OrdersScreenState extends State<OrdersScreen> {
   void initState() {
     super.initState();
     loadTokenAndFetch();
+    searchController.addListener(_filterTransactions);
+  }
+
+  @override
+  void dispose() {
+    searchController.removeListener(_filterTransactions);
+    searchController.dispose();
+    super.dispose();
   }
 
   Future<void> loadTokenAndFetch() async {
     token = await storage.read(key: "auth_token");
-
     if (token != null && token!.isNotEmpty) {
       await fetchTransactions();
     } else {
@@ -39,10 +48,8 @@ class _OrdersScreenState extends State<OrdersScreen> {
 
   Future<void> fetchTransactions() async {
     if (token == null) return;
-
     try {
       setState(() => isLoading = true);
-
       final response = await dio.get(
         baseUrl,
         options: Options(
@@ -52,10 +59,10 @@ class _OrdersScreenState extends State<OrdersScreen> {
           },
         ),
       );
-
       if (response.statusCode == 200 && response.data["success"] == true) {
         setState(() {
-          transactions = response.data["data"]["transactions"] ?? [];
+          allTransactions = response.data["data"]["transactions"] ?? [];
+          filteredTransactions = allTransactions;
           isLoading = false;
         });
       } else {
@@ -63,12 +70,9 @@ class _OrdersScreenState extends State<OrdersScreen> {
       }
     } on DioException catch (e) {
       setState(() => isLoading = false);
-
       if (e.response?.statusCode == 401) {
         await storage.delete(key: "auth_token");
-
         if (!mounted) return;
-
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(builder: (_) => const LoginScreen()),
           (route) => false,
@@ -77,6 +81,96 @@ class _OrdersScreenState extends State<OrdersScreen> {
     } catch (e) {
       setState(() => isLoading = false);
     }
+  }
+
+  void _filterTransactions() {
+    final query = searchController.text.toLowerCase();
+    if (query.isEmpty) {
+      setState(() => filteredTransactions = allTransactions);
+    } else {
+      setState(() {
+        filteredTransactions = allTransactions.where((tx) {
+          final type = (tx['type'] ?? '').toString().toLowerCase();
+          final coinName = tx['coin'] != null
+              ? (tx['coin']['name'] ?? '').toString().toLowerCase()
+              : '';
+          final amount = tx['amount_inr']?.toString() ?? '';
+          return type.contains(query) ||
+              coinName.contains(query) ||
+              amount.contains(query);
+        }).toList();
+      });
+    }
+  }
+
+  String _formatDate(String dateStr) {
+    try {
+      final date = DateTime.parse(dateStr);
+      final now = DateTime.now();
+      final difference = now.difference(date);
+      if (difference.inDays == 0) {
+        return 'Today, ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
+      } else if (difference.inDays == 1) {
+        return 'Yesterday, ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
+      } else {
+        return '${date.day} ${_getMonth(date.month)}, ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
+      }
+    } catch (_) {
+      return dateStr;
+    }
+  }
+
+  String _getMonth(int month) {
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    return months[month - 1];
+  }
+
+  Color _getTypeColor(String type) {
+    switch (type.toLowerCase()) {
+      case 'buy':
+        return Colors.blue;
+      case 'sell':
+        return Colors.green;
+      case 'deposit':
+        return Colors.purple;
+      case 'withdraw':
+        return Colors.orange;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  IconData _getTypeIcon(String type) {
+    switch (type.toLowerCase()) {
+      case 'buy':
+        return Icons.shopping_cart;
+      case 'sell':
+        return Icons.attach_money;
+      case 'deposit':
+        return Icons.arrow_downward;
+      case 'withdraw':
+        return Icons.arrow_upward;
+      default:
+        return Icons.swap_horiz;
+    }
+  }
+
+  String _getCoinName(Map<String, dynamic>? coin) {
+    if (coin == null) return '';
+    return coin['name'] ?? coin['symbol'] ?? '';
   }
 
   @override
@@ -109,18 +203,17 @@ class _OrdersScreenState extends State<OrdersScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
-
-                /// SEARCH
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 14),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(30),
                   ),
-                  child: const TextField(
-                    decoration: InputDecoration(
-                      icon: Icon(Icons.search),
-                      hintText: "Search transactions...",
+                  child: TextField(
+                    controller: searchController,
+                    decoration: const InputDecoration(
+                      icon: Icon(Icons.search, color: Colors.grey),
+                      hintText: "Search by type, coin, amount...",
                       border: InputBorder.none,
                     ),
                   ),
@@ -133,7 +226,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
           Expanded(
             child: isLoading
                 ? const Center(child: CircularProgressIndicator())
-                : transactions.isEmpty
+                : filteredTransactions.isEmpty
                 ? const Center(
                     child: Text(
                       "No Transactions Found",
@@ -142,149 +235,131 @@ class _OrdersScreenState extends State<OrdersScreen> {
                   )
                 : RefreshIndicator(
                     onRefresh: fetchTransactions,
-                    child: Column(
-                      children: [
-                        /// 🔹 TABLE HEADER
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 14,
+                    child: ListView.separated(
+                      padding: const EdgeInsets.all(16),
+                      itemCount: filteredTransactions.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 12),
+                      itemBuilder: (context, index) {
+                        final tx = filteredTransactions[index];
+                        final type = (tx['type'] ?? '').toString();
+                        final coin = tx['coin'] as Map<String, dynamic>?;
+                        final coinName = _getCoinName(coin);
+                        final amount = (tx['actual_amount'] ?? 0).toDouble();
+                        final date = _formatDate(tx['created_at'] ?? '');
+                        final status = tx['status'] ?? 'completed';
+                        final isCredit =
+                            type.toLowerCase() == 'sell' ||
+                            type.toLowerCase() == 'deposit';
+                        final sign = isCredit ? '+' : '-';
+                        final color = _getTypeColor(type);
+
+                        return Card(
+                          elevation: 2,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
                           ),
-                          color: Colors.grey.shade200,
-                          child: Row(
-                            children: const [
-                              Expanded(
-                                flex: 2,
-                                child: Text(
-                                  "DATE",
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 13,
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Row(
+                              children: [
+                                /// Icon with background
+                                Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: color.withOpacity(0.1),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Icon(
+                                    _getTypeIcon(type),
+                                    color: color,
+                                    size: 24,
                                   ),
                                 ),
-                              ),
-                              Expanded(
-                                flex: 1,
-                                child: Text(
-                                  "TYPE",
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 13,
-                                  ),
-                                ),
-                              ),
-                              Expanded(
-                                flex: 1,
-                                child: Text(
-                                  "AMOUNT",
-                                  textAlign: TextAlign.right,
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 13,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+                                const SizedBox(width: 16),
 
-                        /// 🔹 LIST
-                        Expanded(
-                          child: ListView.separated(
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
-                            itemCount: transactions.length,
-                            separatorBuilder: (_, __) =>
-                                const Divider(height: 1),
-                            itemBuilder: (context, index) {
-                              final item = transactions[index];
-
-                              final type = (item["type"] ?? "")
-                                  .toString()
-                                  .toUpperCase();
-
-                              final isSell = type == "SELL";
-
-                              final amount =
-                                  (item["actual_amount"] ??
-                                          item["amount_inr"] ??
-                                          0)
-                                      .toString();
-
-                              return Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 16,
-                                ),
-                                child: Row(
-                                  children: [
-                                    /// DATE
-                                    Expanded(
-                                      flex: 2,
-                                      child: Text(
-                                        item["created_at"]
-                                                ?.toString()
-                                                .substring(0, 16) ??
-                                            "",
+                                /// Middle column: type, coin, date
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Text(
+                                            type.toUpperCase(),
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              color: color,
+                                            ),
+                                          ),
+                                          if (coinName.isNotEmpty) ...[
+                                            const SizedBox(width: 6),
+                                            Text(
+                                              '• $coinName',
+                                              style: const TextStyle(
+                                                color: Colors.grey,
+                                                fontSize: 13,
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        date,
                                         style: const TextStyle(
-                                          fontSize: 13,
+                                          fontSize: 12,
                                           color: Colors.grey,
                                         ),
                                       ),
-                                    ),
+                                    ],
+                                  ),
+                                ),
 
-                                    /// TYPE BADGE
-                                    Expanded(
-                                      flex: 1,
-                                      child: Align(
-                                        alignment: Alignment.centerLeft,
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 10,
-                                            vertical: 5,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: isSell
-                                                ? Colors.green.shade100
-                                                : Colors.blue.shade100,
-                                            borderRadius: BorderRadius.circular(
-                                              16,
-                                            ),
-                                          ),
-                                          child: Text(
-                                            type,
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.bold,
-                                              color: isSell
-                                                  ? Colors.green
-                                                  : Colors.blue,
-                                            ),
-                                          ),
-                                        ),
+                                /// Right column: amount and status
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    Text(
+                                      '$sign₹${amount.toStringAsFixed(2)}',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                        color: isCredit
+                                            ? Colors.green
+                                            : Colors.red,
                                       ),
                                     ),
-
-                                    /// AMOUNT
-                                    Expanded(
-                                      flex: 1,
+                                    const SizedBox(height: 4),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 4,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: status == 'completed'
+                                            ? Colors.green.shade50
+                                            : Colors.orange.shade50,
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
                                       child: Text(
-                                        isSell ? "+₹$amount" : "-₹$amount",
-                                        textAlign: TextAlign.right,
+                                        status.toUpperCase(),
                                         style: TextStyle(
-                                          fontSize: 14,
+                                          fontSize: 10,
                                           fontWeight: FontWeight.bold,
-                                          color: isSell
+                                          color: status == 'completed'
                                               ? Colors.green
-                                              : Colors.red,
+                                              : Colors.orange,
                                         ),
                                       ),
                                     ),
                                   ],
                                 ),
-                              );
-                            },
+                              ],
+                            ),
                           ),
-                        ),
-                      ],
+                        );
+                      },
                     ),
                   ),
           ),
