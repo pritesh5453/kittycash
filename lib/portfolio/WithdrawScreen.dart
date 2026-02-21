@@ -1,8 +1,116 @@
 import 'package:flutter/material.dart';
 import 'package:kittycash/portfolio/RequestWithdrawScreen.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
 
-class WithdrawScreen extends StatelessWidget {
-  const WithdrawScreen({super.key});
+class WithdrawScreen extends StatefulWidget {
+  final double utilizedBalance; // 👈 new field
+
+  const WithdrawScreen({super.key, required this.utilizedBalance});
+
+  @override
+  State<WithdrawScreen> createState() => _WithdrawScreenState();
+}
+
+class _WithdrawScreenState extends State<WithdrawScreen> {
+  bool _isLoading = false;
+  bool _kycCompleted = false;
+  String? _kycMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkKycStatus();
+  }
+
+  Future<void> _checkKycStatus() async {
+    setState(() {
+      _isLoading = true;
+      _kycMessage = null;
+    });
+
+    try {
+      final token = await _getToken();
+      if (token == null) {
+        setState(() {
+          _isLoading = false;
+          _kycMessage = 'Not authenticated. Please log in again.';
+        });
+        return;
+      }
+
+      final response = await http.get(
+        Uri.parse('https://kittycash.co.in/api/kyc/details'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      if (response.statusCode == 200) {
+        final json = jsonDecode(response.body);
+        if (json['success'] == true) {
+          final data = json['data'];
+          final aadhaarVerified = data['aadhaar_verified'] ?? '';
+          final panVerified = data['pan_verified'] ?? '';
+          final bankVerified = data['bank_verified'] ?? '';
+
+          final completed =
+              aadhaarVerified == 'verified' &&
+              panVerified == 'verified' &&
+              bankVerified == 'verified';
+
+          setState(() {
+            _kycCompleted = completed;
+            _isLoading = false;
+            if (!completed) {
+              _kycMessage =
+                  'KYC not completed. Please complete all verifications.';
+            }
+          });
+        } else {
+          setState(() {
+            _isLoading = false;
+            _kycMessage = json['message'] ?? 'Failed to load KYC details';
+          });
+        }
+      } else {
+        setState(() {
+          _isLoading = false;
+          _kycMessage = 'Server error: ${response.statusCode}';
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+        _kycMessage = 'Network error: $e';
+      });
+    }
+  }
+
+  Future<String?> _getToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('auth_token');
+  }
+
+  void _handleWithdrawPress() {
+    if (_isLoading) return;
+    if (_kycCompleted) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => RequestWithdrawalScreen(
+            utilizedBalance: widget.utilizedBalance, // 👈 pass it forward
+          ),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_kycMessage ?? 'KYC not completed'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -11,26 +119,19 @@ class WithdrawScreen extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: const Color(0xFF1E88FF),
         elevation: 0,
-
-        // 🔥 THIS LINE FIXES EVERYTHING
         foregroundColor: Colors.white,
-
         title: const Text("Withdraw"),
-        leading: const Icon(Icons.arrow_back),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.pop(context),
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.notifications_none),
             onPressed: () {},
           ),
-          const Padding(
-            padding: EdgeInsets.only(right: 12),
-            child: CircleAvatar(
-              backgroundImage: NetworkImage("https://i.pravatar.cc/150"),
-            ),
-          ),
         ],
       ),
-
       body: Column(
         children: [
           Expanded(
@@ -76,33 +177,29 @@ class WithdrawScreen extends StatelessWidget {
                       _dot("Processing fees may apply based on your plan"),
                     ],
                   ),
+                  if (_isLoading)
+                    const Padding(
+                      padding: EdgeInsets.all(16),
+                      child: CircularProgressIndicator(),
+                    ),
                 ],
               ),
             ),
           ),
-
           Padding(
-            padding: const EdgeInsets.all(12), // ⬅️ outer spacing कमी
+            padding: const EdgeInsets.all(12),
             child: SizedBox(
               width: double.infinity,
-              height: 40, // ⬅️ आधी 50 होतं, आता छोटं
+              height: 40,
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.orange,
-                  padding: EdgeInsets.zero, // ⬅️ extra inner padding remove
+                  padding: EdgeInsets.zero,
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8), // थोडा छोटा radius
+                    borderRadius: BorderRadius.circular(8),
                   ),
                 ),
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const RequestWithdrawScreen(),
-                    ),
-                  );
-                },
-
+                onPressed: _handleWithdrawPress,
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -110,7 +207,7 @@ class WithdrawScreen extends StatelessWidget {
                       "Withdraw",
                       style: TextStyle(
                         color: Colors.white,
-                        fontSize: 14, // ⬅️ text पण थोडं छोटं
+                        fontSize: 14,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -123,7 +220,7 @@ class WithdrawScreen extends StatelessWidget {
                       ),
                       child: const Icon(
                         Icons.logout,
-                        size: 12, // ⬅️ icon छोटा
+                        size: 12,
                         color: Colors.white,
                       ),
                     ),
@@ -138,7 +235,6 @@ class WithdrawScreen extends StatelessWidget {
   }
 
   // ---------- Widgets ----------
-
   Widget _card({required String title, required List<Widget> children}) {
     return Container(
       padding: const EdgeInsets.all(16),

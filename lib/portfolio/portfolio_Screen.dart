@@ -1,56 +1,108 @@
 import 'package:flutter/material.dart';
+import 'package:kittycash/portfolio/sell_coins.dart';
 import 'package:kittycash/portfolio/wallet_screen.dart';
+import 'package:kittycash/portfolio/wallet_model.dart';
+import 'package:kittycash/services/portfolio_service.dart';
 
-class PortfolioScreen extends StatelessWidget {
+class PortfolioScreen extends StatefulWidget {
   const PortfolioScreen({super.key});
+
+  @override
+  State<PortfolioScreen> createState() => _PortfolioScreenState();
+}
+
+class _PortfolioScreenState extends State<PortfolioScreen> {
+  late Future<PortfolioModel> portfolioFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    portfolioFuture = PortfolioService().fetchPortfolio();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF3F5F9),
-      body: SafeArea(
-        child: Column(
-          children: [
-            _topBar(),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _portfolioCard(),
-                    const SizedBox(height: 16),
-                    myWalletButton(context),
-                    const SizedBox(height: 20),
-                    _myCoinsHeader(),
-                    const SizedBox(height: 12),
-                    _coinCard(),
-                    _coinCard(),
-                    _coinCard(),
-                  ],
-                ),
-              ),
+      body: Column(
+        children: [
+          _topBar(),
+          Expanded(
+            child: FutureBuilder<PortfolioModel>(
+              future: portfolioFuture,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                if (snapshot.hasError) {
+                  return Center(
+                    child: Text(
+                      snapshot.error.toString(),
+                      style: const TextStyle(color: Colors.red),
+                    ),
+                  );
+                }
+
+                final data = snapshot.data!;
+
+                return SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _portfolioCard(data),
+
+                      const SizedBox(height: 16),
+
+                      /// ✅ MY WALLET BUTTON (BACK)
+                      _myWalletButton(context),
+
+                      const SizedBox(height: 24),
+
+                      _myHoldingsHeader(),
+                      const SizedBox(height: 12),
+
+                      if (data.holdings.isEmpty)
+                        const Center(
+                          child: Text(
+                            "No holdings found",
+                            style: TextStyle(color: Colors.grey),
+                          ),
+                        )
+                      else
+                        ...data.holdings.map(_holdingCard).toList(),
+                    ],
+                  ),
+                );
+              },
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
-  // 🔹 Top Bar
+  // ================= TOP BAR =================
   Widget _topBar() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      padding: EdgeInsets.only(
+        top: MediaQuery.of(context).padding.top + 16, // status bar + spacing
+        left: 16,
+        right: 16,
+        bottom: 20,
+      ),
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           colors: [Color(0xFF1E7BFF), Color(0xFF4A9BFF)],
         ),
+        borderRadius: BorderRadius.vertical(bottom: Radius.circular(30)),
       ),
-      child: Row(
+      child: const Row(
         children: [
-          const Icon(Icons.arrow_back, color: Colors.white),
-          const SizedBox(width: 12),
-          const Text(
+          // Icon(Icons.arrow_back, color: Colors.white),
+          SizedBox(width: 12),
+          Text(
             "Portfolio",
             style: TextStyle(
               color: Colors.white,
@@ -58,20 +110,13 @@ class PortfolioScreen extends StatelessWidget {
               fontWeight: FontWeight.w600,
             ),
           ),
-          const Spacer(),
-          const Icon(Icons.notifications_none, color: Colors.white),
-          const SizedBox(width: 12),
-          const CircleAvatar(
-            radius: 16,
-            backgroundImage: AssetImage("assets/images/profile.png"),
-          ),
         ],
       ),
     );
   }
 
-  // 🔹 Portfolio Card
-  Widget _portfolioCard() {
+  // ================= PORTFOLIO CARD =================
+  Widget _portfolioCard(PortfolioModel data) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -89,40 +134,63 @@ class PortfolioScreen extends StatelessWidget {
             style: TextStyle(color: Colors.grey),
           ),
           const SizedBox(height: 8),
+
+          /// coin_holdings_value
           Row(
-            children: const [
+            children: [
               Text(
-                "₹3356.72",
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                "₹${data.coinHoldingsValue.toStringAsFixed(2)}",
+                style: const TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-              SizedBox(width: 8),
+              const SizedBox(width: 8),
               Text(
-                "+9.77%",
+                "${data.profitLossPercent >= 0 ? '+' : ''}"
+                "${data.profitLossPercent.toStringAsFixed(4)}%",
                 style: TextStyle(
-                  color: Colors.green,
+                  color: data.profitLossPercent >= 0
+                      ? Colors.green
+                      : Colors.red,
                   fontWeight: FontWeight.w600,
                 ),
               ),
             ],
           ),
+
           const SizedBox(height: 16),
+
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: const [
-              _amountColumn("Invested Amount", "₹1,613.45"),
-              _amountColumn("Wallet Amount", "₹1590"),
+            children: [
+              _amountColumn(
+                "Invested Amount",
+                "₹${data.totalInvested.toStringAsFixed(2)}",
+              ),
+              _amountColumn(
+                "Wallet Amount",
+                "₹${data.totalBalance.toStringAsFixed(2)}",
+              ),
             ],
+          ),
+
+          const SizedBox(height: 12),
+
+          _amountColumn(
+            "Profit / Loss",
+            "₹${data.profitLoss.toStringAsFixed(2)}",
           ),
         ],
       ),
     );
   }
 
-  // 🔹 Wallet Button
-  Widget myWalletButton(BuildContext context) {
+  // ================= MY WALLET BUTTON =================
+  Widget _myWalletButton(BuildContext context) {
     return Container(
       width: double.infinity,
-      height: 48,
+      height: 50,
       decoration: BoxDecoration(
         color: const Color(0xFF3D6BFF),
         borderRadius: BorderRadius.circular(12),
@@ -132,13 +200,13 @@ class PortfolioScreen extends StatelessWidget {
         onTap: () {
           Navigator.push(
             context,
-            MaterialPageRoute(builder: (context) => const WalletScreen()),
+            MaterialPageRoute(builder: (_) => const WalletScreen()),
           );
         },
-        child: Row(
+        child: const Row(
           mainAxisAlignment: MainAxisAlignment.center,
-          children: const [
-            Icon(Icons.open_in_new, color: Colors.white, size: 18),
+          children: [
+            Icon(Icons.account_balance_wallet, color: Colors.white),
             SizedBox(width: 8),
             Text(
               "My Wallet",
@@ -154,84 +222,124 @@ class PortfolioScreen extends StatelessWidget {
     );
   }
 
-  // 🔹 My Coins Header
-  Widget _myCoinsHeader() {
-    return Row(
-      children: const [
-        Text(
-          "My Coins",
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-        ),
-        Spacer(),
-        Icon(Icons.arrow_forward_ios, size: 16),
-      ],
+  // ================= HOLDINGS HEADER =================
+  Widget _myHoldingsHeader() {
+    return const Text(
+      "My Holdings",
+      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
     );
   }
 
-  // 🔹 Coin Card
-  Widget _coinCard() {
+  // ================= HOLDING CARD =================
+  Widget _holdingCard(HoldingModel h) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.orange.shade200),
-      ),
-      child: Row(
+      height: 110,
+      child: Stack(
+        alignment: Alignment.center,
         children: [
-          const CircleAvatar(
-            radius: 24,
-            backgroundImage: AssetImage("assets/images/kitty.png"),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          /// MAIN CARD
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Row(
               children: [
+                /// LEFT - IMAGE + NAME
                 Row(
                   children: [
-                    const Text(
-                      "KittyCash",
-                      style: TextStyle(fontWeight: FontWeight.w600),
+                    CircleAvatar(
+                      radius: 22,
+                      backgroundImage: NetworkImage(h.coin.image),
                     ),
-                    const SizedBox(width: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.green.shade100,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: const Text(
-                        "+5.9%",
-                        style: TextStyle(fontSize: 11, color: Colors.green),
+                    const SizedBox(width: 12),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          h.coin.name,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          "Qty: ${h.balance.toStringAsFixed(4)}",
+                          style: const TextStyle(
+                            color: Colors.grey,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+
+                const Spacer(),
+
+                /// RIGHT - VALUE & PNL
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      "₹${h.currentValue.toStringAsFixed(2)}",
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      "${h.pnl >= 0 ? '+' : ''}${h.pnl.toStringAsFixed(4)}",
+                      style: TextStyle(
+                        color: h.pnl >= 0 ? Colors.green : Colors.red,
+                        fontSize: 12,
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 4),
-                const Text(
-                  "₹6250.50",
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                const Text(
-                  "+₹125.26 (24 h)",
-                  style: TextStyle(fontSize: 12, color: Colors.green),
-                ),
               ],
             ),
           ),
-          const Icon(Icons.info_outline),
+
+          /// 🔥 CENTER FLOATING SELL BUTTON
+          /// 🔥 CENTER RIGHT SHIFTED SELL BUTTON
+          Align(
+            alignment: const Alignment(
+              0.23,
+              0,
+            ), // 👈 increase value for more right
+            child: SizedBox(
+              height: 36,
+              child: ElevatedButton(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => SellCoinScreen(coinId: h.coin.id),
+                    ),
+                  );
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.orange,
+                  padding: const EdgeInsets.symmetric(horizontal: 30),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(25),
+                  ),
+                  elevation: 4,
+                ),
+                child: const Text(
+                  "Sell",
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );
   }
 }
 
-// 🔹 Small Amount Column
+// ================= AMOUNT COLUMN =================
 class _amountColumn extends StatelessWidget {
   final String title;
   final String value;

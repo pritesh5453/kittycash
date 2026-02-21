@@ -17,8 +17,10 @@ class _LoginScreenState extends State<LoginScreen> {
   bool obscurePassword = true;
   bool isLoading = false;
 
-  final emailController = TextEditingController();
-  final passwordController = TextEditingController();
+  final emailController = TextEditingController(
+    text: "pawarpritesh90@gmail.com",
+  );
+  final passwordController = TextEditingController(text: "12345678");
 
   final FlutterSecureStorage storage = const FlutterSecureStorage();
 

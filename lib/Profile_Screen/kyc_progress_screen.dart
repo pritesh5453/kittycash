@@ -94,7 +94,7 @@ class KycProgressScreen extends StatelessWidget {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => const ProfileScreen(),
+                      builder: (context) => const ProfileScreen(profile: null),
                     ),
                   );
                 },

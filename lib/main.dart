@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kittycash/Onboarding Screens/splashScreen.dart';
 
 void main() {
+  //akash
   runApp(const ProviderScope(child: MyApp()));
 }
 
