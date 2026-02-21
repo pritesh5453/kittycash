@@ -74,7 +74,7 @@ class _ReferralScreenState extends State<ReferralScreen> {
       backgroundColor: const Color(0xFFF6F7FB),
       appBar: AppBar(
         backgroundColor: const Color(0xFF2F6BFF),
-        title: const Text("Referrals"),
+        title: const Text("Referrals", style: TextStyle(color: Colors.white)),
       ),
       body: loading
           ? const Center(child: CircularProgressIndicator())

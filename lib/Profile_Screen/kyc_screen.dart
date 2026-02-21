@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
-import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class KycScreen extends StatefulWidget {
@@ -39,10 +38,17 @@ class _KycScreenState extends State<KycScreen> {
   String? _state;
   String? _postalCode;
 
+  // KYC status fields
+  String? _kycRequestStatus; // optional, may still be used
+  int? _kycCompleted; // 0 or 1
+  String? _aadhaarVerified;
+  String? _panVerified;
+  String? _bankVerified;
+
   // Loading states
   bool _isLoadingDetails = true;
   String? _detailsError;
-  bool _isSubmitting = false;
+  bool _isSubmitting = false; // used for any submission
 
   final ImagePicker _picker = ImagePicker();
 
@@ -75,7 +81,6 @@ class _KycScreenState extends State<KycScreen> {
             // Parse date_of_birth (format: "1998-06-14T18:30:00.000000Z")
             String rawDob = data['date_of_birth'] ?? '';
             if (rawDob.isNotEmpty) {
-              // Extract date part (assuming ISO format)
               _dob = rawDob.split('T')[0];
             }
             _phone = data['phone']?.toString();
@@ -84,6 +89,14 @@ class _KycScreenState extends State<KycScreen> {
             _city = data['city'];
             _state = data['state'];
             _postalCode = data['postal_code']?.toString();
+
+            // KYC statuses
+            _kycRequestStatus = data['kyc_request_status'];
+            _kycCompleted = data['kyc_completed'];
+            _aadhaarVerified = data['aadhaar_verified'];
+            _panVerified = data['pan_verified'];
+            _bankVerified = data['bank_verified'];
+
             _isLoadingDetails = false;
           });
         } else {
@@ -111,7 +124,7 @@ class _KycScreenState extends State<KycScreen> {
     return prefs.getString('auth_token');
   }
 
-  // Image picking methods (unchanged)
+  // ---------- Image picking ----------
   Future<void> _pickImage(
     ImageSource source,
     Function(File?) onImagePicked,
@@ -156,7 +169,8 @@ class _KycScreenState extends State<KycScreen> {
     );
   }
 
-  Future<void> _submitKyc() async {
+  // ---------- Full KYC submission (original) ----------
+  Future<void> _submitFullKyc() async {
     print("=== Starting KYC submission ===");
 
     // Collect user‑entered data
@@ -339,108 +353,296 @@ class _KycScreenState extends State<KycScreen> {
     }
   }
 
+  // ---------- Section‑wise submission for rejected fields ----------
+  Future<void> _submitAadhaar() async {
+    final aadharNumber = _aadharController.text.trim();
+    if (aadharNumber.length != 12) {
+      _showError("Enter a valid 12-digit Aadhar number");
+      return;
+    }
+    if (_aadharFrontImage == null || _aadharBackImage == null) {
+      _showError("Please upload both Aadhar front and back images");
+      return;
+    }
+
+    setState(() => _isSubmitting = true);
+
+    try {
+      final token = await _getToken();
+      if (token == null) throw Exception('Not authenticated');
+
+      var request = http.MultipartRequest(
+        'POST',
+        Uri.parse('https://kittycash.co.in/api/kyc/aadhaar/save'),
+      );
+      request.headers['Authorization'] = 'Bearer $token';
+      request.fields['aadhaar_number'] = aadharNumber;
+      request.files.add(
+        await http.MultipartFile.fromPath(
+          'aadhaar_front_image',
+          _aadharFrontImage!.path,
+        ),
+      );
+      request.files.add(
+        await http.MultipartFile.fromPath(
+          'aadhaar_back_image',
+          _aadharBackImage!.path,
+        ),
+      );
+
+      var streamedResponse = await request.send();
+      var response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final json = jsonDecode(response.body);
+        if (json['success'] == true) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Aadhaar details submitted successfully!'),
+            ),
+          );
+          // Refresh KYC details to update status
+          await _fetchKycDetails();
+        } else {
+          _showError(json['message'] ?? 'Aadhaar submission failed');
+        }
+      } else {
+        _showError('Server error: ${response.statusCode}');
+      }
+    } catch (e) {
+      _showError('Network error: $e');
+    } finally {
+      setState(() => _isSubmitting = false);
+    }
+  }
+
+  Future<void> _submitPan() async {
+    final panNumber = _panController.text.trim().toUpperCase();
+    if (panNumber.length != 10) {
+      _showError("Enter a valid 10-character PAN");
+      return;
+    }
+    if (_panImage == null) {
+      _showError("Please upload PAN card image");
+      return;
+    }
+
+    setState(() => _isSubmitting = true);
+
+    try {
+      final token = await _getToken();
+      if (token == null) throw Exception('Not authenticated');
+
+      var request = http.MultipartRequest(
+        'POST',
+        Uri.parse('https://kittycash.co.in/api/kyc/pan/save'),
+      );
+      request.headers['Authorization'] = 'Bearer $token';
+      request.fields['pan_number'] = panNumber;
+      request.files.add(
+        await http.MultipartFile.fromPath('pan_card_image', _panImage!.path),
+      );
+
+      var streamedResponse = await request.send();
+      var response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final json = jsonDecode(response.body);
+        if (json['success'] == true) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('PAN details submitted successfully!'),
+            ),
+          );
+          await _fetchKycDetails();
+        } else {
+          _showError(json['message'] ?? 'PAN submission failed');
+        }
+      } else {
+        _showError('Server error: ${response.statusCode}');
+      }
+    } catch (e) {
+      _showError('Network error: $e');
+    } finally {
+      setState(() => _isSubmitting = false);
+    }
+  }
+
+  Future<void> _submitBank() async {
+    final bankName = _bankNameController.text.trim();
+    final accountHolder = _accountHolderController.text.trim();
+    final accountNumber = _accountNumberController.text.trim();
+    final ifsc = _ifscController.text.trim().toUpperCase();
+    final branch = _branchController.text.trim();
+
+    if (bankName.isEmpty ||
+        accountHolder.isEmpty ||
+        accountNumber.isEmpty ||
+        ifsc.isEmpty ||
+        branch.isEmpty) {
+      _showError("Please fill all bank details");
+      return;
+    }
+
+    setState(() => _isSubmitting = true);
+
+    try {
+      final token = await _getToken();
+      if (token == null) throw Exception('Not authenticated');
+
+      final response = await http.post(
+        Uri.parse('https://kittycash.co.in/api/kyc/bank/verify'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'bank_name': bankName,
+          'account_holder_name': accountHolder,
+          'account_number': accountNumber,
+          'ifsc_code': ifsc,
+          'bank_branch': branch,
+        }),
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final json = jsonDecode(response.body);
+        if (json['success'] == true) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Bank details submitted successfully!'),
+            ),
+          );
+          await _fetchKycDetails();
+        } else {
+          _showError(json['message'] ?? 'Bank submission failed');
+        }
+      } else {
+        _showError('Server error: ${response.statusCode}');
+      }
+    } catch (e) {
+      _showError('Network error: $e');
+    } finally {
+      setState(() => _isSubmitting = false);
+    }
+  }
+
   void _showError(String message) {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(message)));
   }
 
-  @override
-  void dispose() {
-    _aadharController.dispose();
-    _panController.dispose();
-    _bankNameController.dispose();
-    _accountHolderController.dispose();
-    _accountNumberController.dispose();
-    _ifscController.dispose();
-    _branchController.dispose();
-    super.dispose();
-  }
-
+  // ---------- UI Builders ----------
   @override
   Widget build(BuildContext context) {
-    // Show loading while fetching personal details
     if (_isLoadingDetails) {
-      return Scaffold(
-        backgroundColor: const Color(0xFFEFF2F7),
-        body: const Center(child: CircularProgressIndicator()),
-      );
+      return _buildLoading();
     }
-
-    // Show error if details failed to load
     if (_detailsError != null) {
-      return Scaffold(
-        backgroundColor: const Color(0xFFEFF2F7),
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(_detailsError!),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: _fetchKycDetails,
-                child: const Text('Retry'),
-              ),
-            ],
-          ),
-        ),
-      );
+      return _buildError();
     }
 
-    // Main UI with Aadhar, PAN, and Bank sections
+    // Determine overall status based on individual verification statuses
+    final aadhaar = _aadhaarVerified;
+    final pan = _panVerified;
+    final bank = _bankVerified;
+
+    final allVerified =
+        aadhaar == 'verified' && pan == 'verified' && bank == 'verified';
+    final anyRejected =
+        aadhaar == 'rejected' || pan == 'rejected' || bank == 'rejected';
+    final anyPending =
+        aadhaar == 'pending' || pan == 'pending' || bank == 'pending';
+
+    if (allVerified) {
+      return _buildStatusScreen(
+        'KYC Completed',
+        Icons.check_circle,
+        Colors.green,
+      );
+    } else if (anyRejected) {
+      return _buildRejectedScreen();
+    } else if (anyPending) {
+      return _buildStatusScreen(
+        'KYC Approval Pending',
+        Icons.hourglass_empty,
+        Colors.orange,
+      );
+    } else {
+      // No KYC submitted yet (statuses may be null) → show full form
+      return _buildFullForm();
+    }
+  }
+
+  Widget _buildLoading() {
+    return Scaffold(
+      backgroundColor: const Color(0xFFEFF2F7),
+      body: const Center(child: CircularProgressIndicator()),
+    );
+  }
+
+  Widget _buildError() {
+    return Scaffold(
+      backgroundColor: const Color(0xFFEFF2F7),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(_detailsError!),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: _fetchKycDetails,
+              child: const Text('Retry'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Simple status page (approved or pending)
+  Widget _buildStatusScreen(String message, IconData icon, Color color) {
     return Scaffold(
       backgroundColor: const Color(0xFFEFF2F7),
       body: Column(
         children: [
-          /// 🔵 HEADER
-          Container(
-            padding: const EdgeInsets.only(
-              top: 50,
-              left: 20,
-              right: 20,
-              bottom: 30,
-            ),
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Color(0xFF1E88E5), Color(0xFF1565C0)],
+          _buildHeader(),
+          Expanded(
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(icon, size: 80, color: color),
+                  const SizedBox(height: 20),
+                  Text(
+                    message,
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
               ),
-              borderRadius: BorderRadius.vertical(bottom: Radius.circular(30)),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.arrow_back, color: Colors.white),
-                      onPressed: () => Navigator.pop(context),
-                    ),
-                    const SizedBox(width: 10),
-                    const Text(
-                      "KYC Verification",
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-                Row(
-                  children: [
-                    const Icon(Icons.notifications_none, color: Colors.white),
-                    const SizedBox(width: 15),
-                    const CircleAvatar(
-                      radius: 18,
-                      backgroundImage: AssetImage("assets/images/profile.png"),
-                    ),
-                  ],
-                ),
-              ],
             ),
           ),
+        ],
+      ),
+    );
+  }
 
-          /// 🟦 BODY
+  // Screen for rejected KYC – shows only sections that are rejected
+  Widget _buildRejectedScreen() {
+    // Determine which sections are rejected
+    final showAadhaar = _aadhaarVerified == 'rejected';
+    final showPan = _panVerified == 'rejected';
+    final showBank = _bankVerified == 'rejected';
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFEFF2F7),
+      body: Column(
+        children: [
+          _buildHeader(),
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(20),
@@ -460,7 +662,62 @@ class _KycScreenState extends State<KycScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Aadhar Details
+                    if (showAadhaar) ...[
+                      _buildAadhaarSection(),
+                      const SizedBox(height: 24),
+                    ],
+                    if (showPan) ...[
+                      _buildPanSection(),
+                      const SizedBox(height: 24),
+                    ],
+                    if (showBank) ...[
+                      _buildBankSection(),
+                      const SizedBox(height: 24),
+                    ],
+                    if (!showAadhaar && !showPan && !showBank)
+                      const Center(
+                        child: Text(
+                          'No rejected sections found.',
+                          style: TextStyle(fontSize: 16),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Full KYC form (original UI)
+  Widget _buildFullForm() {
+    return Scaffold(
+      backgroundColor: const Color(0xFFEFF2F7),
+      body: Column(
+        children: [
+          _buildHeader(),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.blue.withOpacity(0.15),
+                      blurRadius: 20,
+                      spreadRadius: 3,
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Aadhar Section
                     const Text(
                       "Aadhar Details",
                       style: TextStyle(
@@ -469,7 +726,6 @@ class _KycScreenState extends State<KycScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
-
                     _buildTextField(
                       "Aadhar Number",
                       "12-digit Aadhar number",
@@ -478,7 +734,6 @@ class _KycScreenState extends State<KycScreen> {
                       maxLength: 12,
                     ),
                     const SizedBox(height: 16),
-
                     Row(
                       children: [
                         Expanded(
@@ -506,11 +761,10 @@ class _KycScreenState extends State<KycScreen> {
                       ],
                     ),
                     const SizedBox(height: 24),
-
                     const Divider(thickness: 1),
                     const SizedBox(height: 16),
 
-                    // PAN Details
+                    // PAN Section
                     const Text(
                       "PAN Card Details",
                       style: TextStyle(
@@ -519,7 +773,6 @@ class _KycScreenState extends State<KycScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
-
                     _buildTextField(
                       "PAN Number",
                       "10-character PAN",
@@ -528,7 +781,6 @@ class _KycScreenState extends State<KycScreen> {
                       maxLength: 10,
                     ),
                     const SizedBox(height: 16),
-
                     _buildUploadBox(
                       label: "Upload PAN Card",
                       icon: Icons.image,
@@ -539,11 +791,10 @@ class _KycScreenState extends State<KycScreen> {
                       ),
                     ),
                     const SizedBox(height: 24),
-
                     const Divider(thickness: 1),
                     const SizedBox(height: 16),
 
-                    // Bank Details
+                    // Bank Section
                     const Text(
                       "Bank Details",
                       style: TextStyle(
@@ -552,21 +803,18 @@ class _KycScreenState extends State<KycScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
-
                     _buildTextField(
                       "Bank Name",
                       "e.g., State Bank of India",
                       _bankNameController,
                     ),
                     const SizedBox(height: 12),
-
                     _buildTextField(
                       "Account Holder Name",
                       "As per bank records",
                       _accountHolderController,
                     ),
                     const SizedBox(height: 12),
-
                     _buildTextField(
                       "Account Number",
                       "Enter account number",
@@ -574,7 +822,6 @@ class _KycScreenState extends State<KycScreen> {
                       keyboardType: TextInputType.number,
                     ),
                     const SizedBox(height: 12),
-
                     _buildTextField(
                       "IFSC Code",
                       "e.g., SBIN0001234",
@@ -582,7 +829,6 @@ class _KycScreenState extends State<KycScreen> {
                       textCapitalization: TextCapitalization.characters,
                     ),
                     const SizedBox(height: 12),
-
                     _buildTextField(
                       "Bank Branch",
                       "e.g., Connaught Place",
@@ -590,11 +836,11 @@ class _KycScreenState extends State<KycScreen> {
                     ),
                     const SizedBox(height: 24),
 
-                    // Submit Button
+                    // Submit button for full KYC
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
-                        onPressed: _isSubmitting ? null : _submitKyc,
+                        onPressed: _isSubmitting ? null : _submitFullKyc,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF2F6BFF),
                           padding: const EdgeInsets.symmetric(vertical: 16),
@@ -630,6 +876,257 @@ class _KycScreenState extends State<KycScreen> {
     );
   }
 
+  // Header widget (common)
+  Widget _buildHeader() {
+    return Container(
+      padding: const EdgeInsets.only(top: 50, left: 20, right: 20, bottom: 30),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFF1E88E5), Color(0xFF1565C0)],
+        ),
+        borderRadius: BorderRadius.vertical(bottom: Radius.circular(30)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.arrow_back, color: Colors.white),
+                onPressed: () => Navigator.pop(context),
+              ),
+              const SizedBox(width: 10),
+              const Text(
+                "KYC Verification",
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          Row(
+            children: [
+              const Icon(Icons.notifications_none, color: Colors.white),
+              const SizedBox(width: 15),
+              const CircleAvatar(
+                radius: 18,
+                backgroundImage: AssetImage("assets/images/profile.png"),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ---------- Section builders for rejected case ----------
+  Widget _buildAadhaarSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          "Aadhar Details (Rejected)",
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Colors.red,
+          ),
+        ),
+        const SizedBox(height: 16),
+        _buildTextField(
+          "Aadhar Number",
+          "12-digit Aadhar number",
+          _aadharController,
+          keyboardType: TextInputType.number,
+          maxLength: 12,
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: _buildUploadBox(
+                label: "Aadhar Front",
+                icon: Icons.credit_card,
+                image: _aadharFrontImage,
+                onTap: () => _showImageSourceDialog(
+                  (file) => setState(() => _aadharFrontImage = file),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildUploadBox(
+                label: "Aadhar Back",
+                icon: Icons.credit_card,
+                image: _aadharBackImage,
+                onTap: () => _showImageSourceDialog(
+                  (file) => setState(() => _aadharBackImage = file),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            onPressed: _isSubmitting ? null : _submitAadhaar,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+            ),
+            child: _isSubmitting
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      color: Colors.white,
+                      strokeWidth: 2,
+                    ),
+                  )
+                : const Text(
+                    "Submit Aadhaar",
+                    style: TextStyle(color: Colors.white),
+                  ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPanSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          "PAN Details (Rejected)",
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Colors.red,
+          ),
+        ),
+        const SizedBox(height: 16),
+        _buildTextField(
+          "PAN Number",
+          "10-character PAN",
+          _panController,
+          textCapitalization: TextCapitalization.characters,
+          maxLength: 10,
+        ),
+        const SizedBox(height: 16),
+        _buildUploadBox(
+          label: "Upload PAN Card",
+          icon: Icons.image,
+          fullWidth: true,
+          image: _panImage,
+          onTap: () => _showImageSourceDialog(
+            (file) => setState(() => _panImage = file),
+          ),
+        ),
+        const SizedBox(height: 16),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            onPressed: _isSubmitting ? null : _submitPan,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+            ),
+            child: _isSubmitting
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      color: Colors.white,
+                      strokeWidth: 2,
+                    ),
+                  )
+                : const Text(
+                    "Submit PAN",
+                    style: TextStyle(color: Colors.white),
+                  ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBankSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          "Bank Details (Rejected)",
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Colors.red,
+          ),
+        ),
+        const SizedBox(height: 16),
+        _buildTextField(
+          "Bank Name",
+          "e.g., State Bank of India",
+          _bankNameController,
+        ),
+        const SizedBox(height: 12),
+        _buildTextField(
+          "Account Holder Name",
+          "As per bank records",
+          _accountHolderController,
+        ),
+        const SizedBox(height: 12),
+        _buildTextField(
+          "Account Number",
+          "Enter account number",
+          _accountNumberController,
+          keyboardType: TextInputType.number,
+        ),
+        const SizedBox(height: 12),
+        _buildTextField(
+          "IFSC Code",
+          "e.g., SBIN0001234",
+          _ifscController,
+          textCapitalization: TextCapitalization.characters,
+        ),
+        const SizedBox(height: 12),
+        _buildTextField(
+          "Bank Branch",
+          "e.g., Connaught Place",
+          _branchController,
+        ),
+        const SizedBox(height: 16),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            onPressed: _isSubmitting ? null : _submitBank,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+            ),
+            child: _isSubmitting
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      color: Colors.white,
+                      strokeWidth: 2,
+                    ),
+                  )
+                : const Text(
+                    "Submit Bank Details",
+                    style: TextStyle(color: Colors.white),
+                  ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ---------- Reusable field and upload widgets ----------
   Widget _buildTextField(
     String label,
     String hint,
@@ -730,5 +1227,17 @@ class _KycScreenState extends State<KycScreen> {
               ),
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _aadharController.dispose();
+    _panController.dispose();
+    _bankNameController.dispose();
+    _accountHolderController.dispose();
+    _accountNumberController.dispose();
+    _ifscController.dispose();
+    _branchController.dispose();
+    super.dispose();
   }
 }

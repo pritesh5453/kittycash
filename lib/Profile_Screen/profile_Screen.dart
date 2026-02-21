@@ -174,7 +174,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               onPressed: () => Navigator.pop(context),
                             ),
                             const Spacer(),
-                            const Icon(Icons.more_vert, color: Colors.white),
                           ],
                         ),
                         const SizedBox(height: 20),
