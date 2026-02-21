@@ -163,7 +163,7 @@ class _BuyCoinScreenState extends State<BuyCoinScreen> {
                 ),
                 const CircleAvatar(
                   radius: 18,
-                  backgroundImage: AssetImage("assets/images/profile.png"),
+                  backgroundImage: AssetImage("assets/images/profile.jpg"),
                 ),
               ],
             ),

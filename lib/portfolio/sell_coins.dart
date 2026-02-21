@@ -273,7 +273,7 @@ class _SellCoinScreenState extends State<SellCoinScreen> {
                     const SizedBox(width: 15),
                     const CircleAvatar(
                       radius: 18,
-                      backgroundImage: AssetImage("assets/images/profile.png"),
+                      backgroundImage: AssetImage("assets/images/profile.jpg"),
                     ),
                   ],
                 ),

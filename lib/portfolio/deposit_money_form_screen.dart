@@ -333,7 +333,7 @@ class _DepositMoneyFormScreenState extends State<DepositMoneyFormScreen> {
           SizedBox(width: 12),
           CircleAvatar(
             radius: 16,
-            backgroundImage: AssetImage("assets/images/profile.png"),
+            backgroundImage: AssetImage("assets/images/profile.jpg"),
           ),
           SizedBox(width: 12),
         ],

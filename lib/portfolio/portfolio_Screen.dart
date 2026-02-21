@@ -100,7 +100,7 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
       ),
       child: const Row(
         children: [
-          Icon(Icons.arrow_back, color: Colors.white),
+          // Icon(Icons.arrow_back, color: Colors.white),
           SizedBox(width: 12),
           Text(
             "Portfolio",

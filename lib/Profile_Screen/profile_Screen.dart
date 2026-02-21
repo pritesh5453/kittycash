@@ -133,7 +133,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         profile!["profile_image"].toString().isNotEmpty) {
       avatar = NetworkImage(profile!["profile_image"]);
     } else {
-      avatar = const AssetImage("assets/images/profile.png");
+      avatar = const AssetImage("assets/images/profile.jpg");
     }
 
     return Scaffold(
@@ -164,18 +164,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     bottom: false,
                     child: Column(
                       children: [
-                        Row(
-                          children: [
-                            IconButton(
-                              icon: const Icon(
-                                Icons.arrow_back,
-                                color: Colors.white,
-                              ),
-                              onPressed: () => Navigator.pop(context),
-                            ),
-                            const Spacer(),
-                          ],
-                        ),
                         const SizedBox(height: 20),
                         CircleAvatar(radius: 40, backgroundImage: avatar),
                         const SizedBox(height: 12),

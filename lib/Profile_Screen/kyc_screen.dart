@@ -912,7 +912,7 @@ class _KycScreenState extends State<KycScreen> {
               const SizedBox(width: 15),
               const CircleAvatar(
                 radius: 18,
-                backgroundImage: AssetImage("assets/images/profile.png"),
+                backgroundImage: AssetImage("assets/images/profile.jpg"),
               ),
             ],
           ),
